@@ -111,15 +111,19 @@ class TestMitsubishiAPIIntegration:
         # Mock the decryption to return our real XML
         api = MitsubishiAPI("192.168.1.100")
         
-        with patch.object(api, 'decrypt_payload') as mock_decrypt:
-            mock_decrypt.return_value = REAL_DEVICE_XML_RESPONSE
+        # Mock the session.post method instead of requests.post
+        with patch.object(api.session, 'post') as mock_session_post:
+            mock_session_post.return_value = mock_response
             
-            response = api.send_status_request()
-            
-            assert response == REAL_DEVICE_XML_RESPONSE
-            assert "AA:BB:CC:DD:EE:FF" in response
-            assert "1234567890" in response
-            assert "PROFILECODE" in response
+            with patch.object(api, 'decrypt_payload') as mock_decrypt:
+                mock_decrypt.return_value = REAL_DEVICE_XML_RESPONSE
+                
+                response = api.send_status_request()
+                
+                assert response == REAL_DEVICE_XML_RESPONSE
+                assert "AA:BB:CC:DD:EE:FF" in response
+                assert "1234567890" in response
+                assert "PROFILECODE" in response
     
     def test_encryption_decryption_cycle(self, mock_post):
         """Test that encryption/decryption works with real-like data."""
@@ -243,14 +247,16 @@ class TestErrorHandling:
     
     def test_connection_timeout_handling(self):
         """Test handling of connection timeouts."""
-        with patch('pymitsubishi.mitsubishi_api.requests.post') as mock_post:
-            mock_post.side_effect = Exception("Connection timeout")
+        import requests.exceptions
+        
+        api = MitsubishiAPI("192.168.1.100")
+        
+        with patch.object(api.session, 'post') as mock_post:
+            mock_post.side_effect = requests.exceptions.ConnectTimeout("Connection timeout")
             
-            api = MitsubishiAPI("192.168.1.100")
-            
-            # Should handle timeout gracefully
-            with pytest.raises(Exception):
-                api.send_status_request()
+            # Should handle timeout gracefully by returning None
+            response = api.send_status_request()
+            assert response is None
 
 
 class TestRealWorldScenarios:

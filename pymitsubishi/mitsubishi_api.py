@@ -21,14 +21,15 @@ STATIC_KEY = "unregistered"
 class MitsubishiAPI:
     """Handles all API communication with Mitsubishi AC devices"""
     
-    def __init__(self, device_ip: str):
+    def __init__(self, device_ip: str, encryption_key: str = STATIC_KEY):
         self.device_ip = device_ip
+        self.encryption_key = encryption_key
         self.session = requests.Session()
         
     def get_crypto_key(self):
         """Get the crypto key, same as TypeScript implementation"""
         buffer = bytearray(KEY_SIZE)
-        key_bytes = STATIC_KEY.encode('utf-8')
+        key_bytes = self.encryption_key.encode('utf-8')
         buffer[:len(key_bytes)] = key_bytes
         return bytes(buffer)
 

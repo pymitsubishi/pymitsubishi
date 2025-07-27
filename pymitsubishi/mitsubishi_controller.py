@@ -22,6 +22,12 @@ class MitsubishiController:
     def __init__(self, api: MitsubishiAPI):
         self.api = api
         self.state = ParsedDeviceState()
+    
+    @classmethod
+    def create(cls, device_ip: str, encryption_key: str = "unregistered"):
+        """Create a MitsubishiController with the specified encryption key"""
+        api = MitsubishiAPI(device_ip=device_ip, encryption_key=encryption_key)
+        return cls(api)
         
     def fetch_status(self, debug: bool = False, detect_capabilities: bool = True) -> bool:
         """Fetch current device status and optionally detect capabilities"""

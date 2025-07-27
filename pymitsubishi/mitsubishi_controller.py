@@ -309,9 +309,9 @@ class MitsubishiController:
         response = self.api.send_echonet_enable(debug=debug)
         return response is not None
 
-    def get_unit_info(self, admin_password: str = "me1debug@0567", debug: bool = False) -> Optional[Dict[str, Any]]:
+    def get_unit_info(self, debug: bool = False) -> Optional[Dict[str, Any]]:
         """Get detailed unit information from the admin interface"""
-        unit_info = self.api.get_unit_info(admin_password=admin_password, debug=debug)
+        unit_info = self.api.get_unit_info(debug=debug)
         
         if unit_info and debug:
             print(f"✅ Unit info retrieved: {len(unit_info.get('adaptor_info', {}))} adaptor fields, {len(unit_info.get('unit_info', {}))} unit fields")

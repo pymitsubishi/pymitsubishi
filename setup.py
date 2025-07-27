@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='pymitsubishi',
-    version="0.1.5",
+    version="0.1.6",
     description='Control and monitor Mitsubishi Air Conditioners',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
@@ -25,10 +25,6 @@ setup(
     },
     classifiers=[
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.8',
-        'Programming Language :: Python :: 3.9',
-        'Programming Language :: Python :: 3.10',
-        'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: 3.12',
         'Programming Language :: Python :: 3.13',
         'License :: OSI Approved :: MIT License',
@@ -38,5 +34,5 @@ setup(
         'Topic :: Home Automation',
         'Topic :: Software Development :: Libraries :: Python Modules',
     ],
-    python_requires='>=3.8',
+    python_requires='>=3.12',
 )

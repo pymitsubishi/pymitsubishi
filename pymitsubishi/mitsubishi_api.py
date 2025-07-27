@@ -23,9 +23,11 @@ STATIC_KEY = "unregistered"
 class MitsubishiAPI:
     """Handles all API communication with Mitsubishi AC devices"""
     
-    def __init__(self, device_ip: str, encryption_key: str = STATIC_KEY):
+    def __init__(self, device_ip: str, encryption_key: str = STATIC_KEY, admin_username: str = "admin", admin_password: str = "me1debug@0567"):
         self.device_ip = device_ip
         self.encryption_key = encryption_key
+        self.admin_username = admin_username
+        self.admin_password = admin_password
         self.session = requests.Session()
         
     def get_crypto_key(self):
@@ -201,11 +203,13 @@ class MitsubishiAPI:
         payload_xml = f'<CSV><CONNECT>ON</CONNECT><CODE><VALUE>{hex_command}</VALUE></CODE></CSV>'
         return self.make_request(payload_xml, debug=debug)
 
-    def get_unit_info(self, admin_password: str = "me1debug@0567", debug: bool = False) -> Optional[Dict[str, Any]]:
+    def get_unit_info(self, admin_password: str = None, debug: bool = False) -> Optional[Dict[str, Any]]:
         """Get unit information from the /unitinfo endpoint using admin credentials"""
         try:
             url = f'http://{self.device_ip}/unitinfo'
-            auth = HTTPBasicAuth('admin', admin_password)
+            # Use provided password or fall back to instance default
+            password = admin_password or self.admin_password
+            auth = HTTPBasicAuth(self.admin_username, password)
             
             if debug:
                 print(f"[DEBUG] Fetching unit info from {url}")

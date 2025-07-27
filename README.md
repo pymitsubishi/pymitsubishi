@@ -1,5 +1,10 @@
 # PyMitsubishi
 
+[![PyPI version](https://badge.fury.io/py/pymitsubishi.svg)](https://badge.fury.io/py/pymitsubishi)
+[![Python Versions](https://img.shields.io/pypi/pyversions/pymitsubishi.svg)](https://pypi.org/project/pymitsubishi/)
+[![Downloads](https://static.pepy.tech/badge/pymitsubishi)](https://pepy.tech/project/pymitsubishi)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A Python library for controlling and monitoring Mitsubishi MAC-577IF-2E air conditioners.
 
 ## Features
@@ -97,7 +102,7 @@ Advanced capability detection using ProfileCode and group code analysis.
 
 ## Requirements
 
-- Python 3.6+
+- Python 3.12+
 - requests
 - pycryptodome
 

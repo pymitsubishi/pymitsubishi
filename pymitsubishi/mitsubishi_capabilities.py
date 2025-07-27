@@ -143,7 +143,7 @@ class DeviceCapabilities:
             print(f"  Version Info: 0x{version_info:04x}")
             print(f"  Feature Flags: 0x{feature_flags:04x}")
             print(f"  Capability Field: 0x{capability_field:04x}")
-            print(f"  Inferred Capabilities: {[cap.value for cap in inferred_capabilities]}")
+            print(f"  Inferred Capabilities: {inferred_capabilities}")
             
             return analysis
             
@@ -182,7 +182,7 @@ class DeviceCapabilities:
                 'feature_flags': self.profile_analysis.feature_flags,
                 'capability_field': self.profile_analysis.capability_field,
                 'device_type': self.profile_analysis.device_type,
-                'inferred_capabilities': [cap.value for cap in self.profile_analysis.inferred_capabilities],
+                'inferred_capabilities': self.profile_analysis.inferred_capabilities,
                 'raw_data': self.profile_analysis.raw_data.hex()
             }
         
@@ -383,11 +383,11 @@ class CapabilityDetector:
                 cap = self.capabilities.get_capability(predicted_cap)
                 if cap and cap.metadata.get('validated_by_group_code'):
                     validated.append(predicted_cap)
-                    print(f"  ✅ {predicted_cap.value} - VALIDATED by group code {cap.metadata['validated_by_group_code']}")
+                    print(f"  ✅ {predicted_cap} - VALIDATED by group code {cap.metadata['validated_by_group_code']}")
                 else:
-                    print(f"  🔍 {predicted_cap.value} - predicted but not validated by group codes")
+                    print(f"  🔍 {predicted_cap} - predicted but not validated by group codes")
             else:
-                print(f"  ❌ {predicted_cap.value} - predicted but not confirmed")
+                print(f"  ❌ {predicted_cap} - predicted but not confirmed")
         
         print(f"🎯 Validation Summary: {len(validated)}/{len(predictions)} predictions validated")
     

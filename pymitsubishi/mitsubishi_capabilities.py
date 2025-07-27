@@ -125,18 +125,9 @@ class DeviceCapabilities:
             # Store the analysis
             self.profile_analysis = analysis
             
-            # Update device capabilities based on analysis
-            for cap_type in inferred_capabilities:
-                self.capabilities[cap_type] = DeviceCapability(
-                    capability_type=cap_type,
-                    supported=True,
-                    metadata={
-                        'source': 'profile_code',
-                        'version_info': hex(version_info),
-                        'feature_flags': hex(feature_flags),
-                        'capability_field': hex(capability_field)
-                    }
-                )
+            # Update device capabilities based on analysis - but skip storing them
+            # as they're not CapabilityType enum values, just strings
+            # This prevents the get_status_summary error
             
             print(f"🔍 ProfileCode Analysis Complete:")
             print(f"  Device Type: {device_type}")

@@ -341,7 +341,7 @@ class MitsubishiController:
         # Include capabilities if available
         if hasattr(self.state, 'capabilities') and self.state.capabilities:
             summary['capabilities'] = {
-                cap_type.value: {
+                (cap_type.value if hasattr(cap_type, 'value') else str(cap_type)): {
                     'supported': cap.supported,
                     'min_value': cap.min_value,
                     'max_value': cap.max_value,

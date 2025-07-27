@@ -43,7 +43,7 @@ jobs:
     
     - name: Test with pytest
       run: |
-        pytest tests/ || echo "No tests found or tests failed"
+        pytest pymitsubishi/tests/ -v
 
   build:
     needs: test

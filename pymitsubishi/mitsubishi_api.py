@@ -7,11 +7,13 @@ for Mitsubishi MAC-577IF-2E devices.
 """
 
 import base64
+import re
 import requests
 import xml.etree.ElementTree as ET
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
-from typing import Optional
+from requests.auth import HTTPBasicAuth
+from typing import Optional, Dict, Any
 
 # Constants from the working implementation
 KEY_SIZE = 16
@@ -198,6 +200,144 @@ class MitsubishiAPI:
         """Send a hex command to the device"""
         payload_xml = f'<CSV><CONNECT>ON</CONNECT><CODE><VALUE>{hex_command}</VALUE></CODE></CSV>'
         return self.make_request(payload_xml, debug=debug)
+
+    def get_unit_info(self, admin_password: str = "me1debug@0567", debug: bool = False) -> Optional[Dict[str, Any]]:
+        """Get unit information from the /unitinfo endpoint using admin credentials"""
+        try:
+            url = f'http://{self.device_ip}/unitinfo'
+            auth = HTTPBasicAuth('admin', admin_password)
+            
+            if debug:
+                print(f"[DEBUG] Fetching unit info from {url}")
+            
+            response = self.session.get(url, auth=auth, timeout=10)
+            
+            if response.status_code == 200:
+                if debug:
+                    print(f"[DEBUG] Unit info HTML response received ({len(response.text)} chars)")
+                
+                # Parse the HTML response to extract unit information
+                return self._parse_unit_info_html(response.text, debug=debug)
+            else:
+                if debug:
+                    print(f"[DEBUG] Unit info request failed with status {response.status_code}")
+                return None
+                
+        except requests.exceptions.RequestException as e:
+            if debug:
+                print(f"[DEBUG] Unit info request error: {e}")
+            return None
+    
+    def _parse_unit_info_html(self, html_content: str, debug: bool = False) -> Dict[str, Any]:
+        """Parse unit info HTML response to extract structured data"""
+        unit_info = {
+            'adaptor_info': {},
+            'unit_info': {}
+        }
+        
+        try:
+            # Extract data using regex patterns to parse the HTML structure
+            # Pattern to match <dt>Label</dt><dd>Value</dd> pairs
+            pattern = r'<dt>([^<]+)</dt>\s*<dd>([^<]+)</dd>'
+            matches = re.findall(pattern, html_content)
+            
+            if debug:
+                print(f"[DEBUG] Found {len(matches)} key-value pairs in HTML")
+            
+            # Determine which section we're in based on the order and known fields
+            adaptor_fields = {
+                'Adaptor name', 'Application version', 'Release version', 'Flash version',
+                'Boot version', 'Common platform version', 'Test release version',
+                'MAC address', 'ID', 'Manufacturing date', 'Current time', 'Channel',
+                'RSSI', 'IT communication status', 'Server operation', 
+                'Server communication status', 'Server communication status(HEMS)',
+                'SOI communication status', 'Thermal image timestamp'
+            }
+            
+            unit_fields = {
+                'Unit type', 'IT protocol version', 'Error'
+            }
+            
+            for key, value in matches:
+                key = key.strip()
+                value = value.strip()
+                
+                if key in adaptor_fields:
+                    # Convert specific fields to appropriate types
+                    if key == 'RSSI':
+                        # Extract numeric value from "-25dBm" format
+                        rssi_match = re.search(r'(-?\d+)', value)
+                        if rssi_match:
+                            unit_info['adaptor_info']['rssi_dbm'] = int(rssi_match.group(1))
+                        unit_info['adaptor_info']['rssi_raw'] = value
+                    elif key == 'Channel':
+                        try:
+                            unit_info['adaptor_info']['wifi_channel'] = int(value)
+                        except ValueError:
+                            unit_info['adaptor_info']['wifi_channel_raw'] = value
+                    elif key == 'ID':
+                        try:
+                            unit_info['adaptor_info']['device_id'] = int(value)
+                        except ValueError:
+                            unit_info['adaptor_info']['device_id_raw'] = value
+                    elif key == 'MAC address':
+                        unit_info['adaptor_info']['mac_address'] = value
+                    elif key == 'Manufacturing date':
+                        unit_info['adaptor_info']['manufacturing_date'] = value
+                    elif key == 'Current time':
+                        unit_info['adaptor_info']['current_time'] = value
+                    elif key == 'Adaptor name':
+                        unit_info['adaptor_info']['model'] = value
+                    elif key == 'Application version':
+                        unit_info['adaptor_info']['app_version'] = value
+                    elif key == 'Release version':
+                        unit_info['adaptor_info']['release_version'] = value
+                    elif key == 'Flash version':
+                        unit_info['adaptor_info']['flash_version'] = value
+                    elif key == 'Boot version':
+                        unit_info['adaptor_info']['boot_version'] = value
+                    elif key == 'Common platform version':
+                        unit_info['adaptor_info']['platform_version'] = value
+                    elif key == 'Test release version':
+                        unit_info['adaptor_info']['test_version'] = value
+                    elif key == 'IT communication status':
+                        unit_info['adaptor_info']['it_comm_status'] = value
+                    elif key == 'Server operation':
+                        unit_info['adaptor_info']['server_operation'] = value == 'ON'
+                    elif key == 'Server communication status':
+                        unit_info['adaptor_info']['server_comm_status'] = value
+                    elif key == 'Server communication status(HEMS)':
+                        unit_info['adaptor_info']['hems_comm_status'] = value
+                    elif key == 'SOI communication status':
+                        unit_info['adaptor_info']['soi_comm_status'] = value
+                    elif key == 'Thermal image timestamp':
+                        unit_info['adaptor_info']['thermal_timestamp'] = value if value != '--' else None
+                    else:
+                        # Fallback: store with normalized key
+                        normalized_key = key.lower().replace(' ', '_').replace('(', '').replace(')', '')
+                        unit_info['adaptor_info'][normalized_key] = value
+                        
+                elif key in unit_fields:
+                    if key == 'Unit type':
+                        unit_info['unit_info']['type'] = value
+                    elif key == 'IT protocol version':
+                        unit_info['unit_info']['it_protocol_version'] = value
+                    elif key == 'Error':
+                        unit_info['unit_info']['error_code'] = value
+                    else:
+                        # Fallback: store with normalized key
+                        normalized_key = key.lower().replace(' ', '_')
+                        unit_info['unit_info'][normalized_key] = value
+            
+            if debug:
+                print(f"[DEBUG] Parsed unit info: {len(unit_info['adaptor_info'])} adaptor fields, {len(unit_info['unit_info'])} unit fields")
+            
+            return unit_info
+            
+        except Exception as e:
+            if debug:
+                print(f"[DEBUG] Error parsing unit info HTML: {e}")
+            return {'adaptor_info': {}, 'unit_info': {}, 'parse_error': str(e)}
 
     def close(self):
         """Close the session"""

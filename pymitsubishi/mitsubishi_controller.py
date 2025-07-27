@@ -7,7 +7,7 @@ for Mitsubishi MAC-577IF-2E devices.
 """
 
 import xml.etree.ElementTree as ET
-from typing import Dict
+from typing import Dict, Optional, Any
 from .mitsubishi_api import MitsubishiAPI
 from .mitsubishi_parser import (
     PowerOnOff, DriveMode, WindSpeed, VerticalWindDirection, 
@@ -308,6 +308,15 @@ class MitsubishiController:
         """Send ECHONET enable command"""
         response = self.api.send_echonet_enable(debug=debug)
         return response is not None
+
+    def get_unit_info(self, admin_password: str = "me1debug@0567", debug: bool = False) -> Optional[Dict[str, Any]]:
+        """Get detailed unit information from the admin interface"""
+        unit_info = self.api.get_unit_info(admin_password=admin_password, debug=debug)
+        
+        if unit_info and debug:
+            print(f"✅ Unit info retrieved: {len(unit_info.get('adaptor_info', {}))} adaptor fields, {len(unit_info.get('unit_info', {}))} unit fields")
+        
+        return unit_info
 
     def get_status_summary(self) -> Dict[str, any]:
         """Get human-readable status summary"""

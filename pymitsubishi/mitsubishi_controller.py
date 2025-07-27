@@ -324,6 +324,9 @@ class MitsubishiController:
                 'fan_speed': self.state.general.wind_speed.name,
                 'dehumidifier_setting': self.state.general.dehum_setting,
                 'power_saving_mode': self.state.general.is_power_saving,
+                'vertical_vane_right': self.state.general.vertical_wind_direction_right.name,
+                'vertical_vane_left': self.state.general.vertical_wind_direction_left.name,
+                'horizontal_vane': self.state.general.horizontal_wind_direction.name,
             })
             
         if self.state.sensors:

@@ -8,12 +8,21 @@ setup(
     long_description_content_type='text/markdown',
     author='Ashleigh Hopkins',
     author_email='ashleigh@example.com',
-    url='https://github.com/ashleigh-hopkins/pymitsubishi',
+    url='https://github.com/pymitsubishi/pymitsubishi',
     packages=find_packages(),
     install_requires=[
         'requests',
         'pycryptodome',
     ],
+    extras_require={
+        'dev': [
+            'pytest>=6.0',
+            'flake8',
+            'mypy',
+            'build',
+            'twine',
+        ],
+    },
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: MIT License',

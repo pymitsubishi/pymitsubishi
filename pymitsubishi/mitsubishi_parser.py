@@ -69,6 +69,12 @@ class GeneralStates:
     dehum_setting: int = 0
     is_power_saving: bool = False
     wind_and_wind_break_direct: int = 0
+    # Enhanced functionality based on SwiCago insights
+    i_see_sensor: bool = False  # i-See sensor active flag
+    mode_raw_value: int = 0     # Raw mode value before i-See processing
+    wide_vane_adjustment: bool = False  # Wide vane adjustment flag (SwiCago wideVaneAdj)
+    temp_mode: bool = False     # Direct temperature mode flag (SwiCago tempMode)
+    undocumented_flags: Dict[str, Any] = None  # Store unknown bit patterns for analysis
 
 @dataclass
 class SensorStates:
@@ -77,6 +83,13 @@ class SensorStates:
     room_temperature: int = 220  # 22.0°C in 0.1°C units
     thermal_sensor: bool = False
     wind_speed_pr557: int = 0
+
+@dataclass
+class EnergyStates:
+    """Parsed energy and operational states from device response"""
+    compressor_frequency: Optional[int] = None  # Raw compressor frequency value
+    operating: bool = False  # True if heat pump is actively operating
+    estimated_power_watts: Optional[float] = None  # Estimated power consumption in Watts
 
 @dataclass 
 class ErrorStates:
@@ -90,6 +103,7 @@ class ParsedDeviceState:
     general: Optional[GeneralStates] = None
     sensors: Optional[SensorStates] = None
     errors: Optional[ErrorStates] = None
+    energy: Optional[EnergyStates] = None  # New energy/operational data
     mac: str = ""
     serial: str = ""
     rssi: str = ""
@@ -118,7 +132,13 @@ class ParsedDeviceState:
                 'dehumidification_setting': self.general.dehum_setting,
                 'power_saving_mode': self.general.is_power_saving,
                 'wind_and_wind_break_direct': self.general.wind_and_wind_break_direct,
+                # Enhanced functionality
+                'i_see_sensor_active': self.general.i_see_sensor,
+                'mode_raw_value': self.general.mode_raw_value,
             }
+            # Include undocumented flags analysis if present
+            if self.general.undocumented_flags:
+                result['general_states']['undocumented_analysis'] = self.general.undocumented_flags
             
         if self.sensors:
             result['sensor_states'] = {
@@ -132,6 +152,13 @@ class ParsedDeviceState:
             result['error_states'] = {
                 'abnormal_state': self.errors.is_abnormal_state,
                 'error_code': self.errors.error_code,
+            }
+            
+        if self.energy:
+            result['energy_states'] = {
+                'compressor_frequency': self.energy.compressor_frequency,
+                'operating': self.energy.operating,
+                'estimated_power_watts': self.energy.estimated_power_watts,
             }
             
         return result
@@ -196,6 +223,89 @@ def get_drive_mode(segment: str) -> DriveMode:
     }
     return mode_map.get(segment, DriveMode.FAN)
 
+def parse_mode_with_i_see(mode_byte: int) -> tuple[DriveMode, bool, int]:
+    """Parse drive mode considering i-See sensor flag (SwiCago enhancement)
+    
+    Based on SwiCago implementation: i-See sensor is detected when mode > 0x08.
+    The actual mode is extracted by subtracting 0x08 from the raw mode value.
+    
+    Args:
+        mode_byte: Raw mode byte value from payload
+        
+    Returns:
+        tuple of (drive_mode, i_see_active, raw_mode_value)
+    """
+    # Check if i-See sensor flag is set (mode > 0x08 as per SwiCago)
+    i_see_active = mode_byte > 0x08
+    
+    # Extract actual mode by removing i-See flag if present
+    # This matches SwiCago's logic: receivedSettings.iSee ? (data[4] - 0x08) : data[4]
+    actual_mode_value = mode_byte - 0x08 if i_see_active else mode_byte
+    
+    # Map the mode value to DriveMode enum
+    mode_hex = f"{actual_mode_value:02x}"
+    drive_mode = get_drive_mode(mode_hex)
+    
+    return drive_mode, i_see_active, mode_byte
+
+def analyze_undocumented_bits(payload: str) -> Dict[str, Any]:
+    """Analyze payload for undocumented bit patterns and flags
+    
+    This function helps identify unknown functionality by examining
+    bit patterns that haven't been documented yet.
+    """
+    analysis = {
+        'payload_length': len(payload),
+        'suspicious_patterns': [],
+        'high_bits_set': [],
+        'unknown_segments': {}
+    }
+    
+    if len(payload) < 42:
+        return analysis
+    
+    try:
+        # Examine each byte for unusual patterns
+        for i in range(0, min(len(payload), 42), 2):
+            if i + 2 <= len(payload):
+                byte_hex = payload[i:i+2]
+                byte_val = int(byte_hex, 16)
+                position = i // 2
+                
+                # Look for high bits that might indicate additional flags
+                if byte_val & 0x80:  # High bit set
+                    analysis['high_bits_set'].append({
+                        'position': position,
+                        'hex': byte_hex,
+                        'value': byte_val,
+                        'binary': f"{byte_val:08b}"
+                    })
+                
+                # Look for patterns that don't match known mappings
+                if position == 9:  # Mode byte position
+                    if byte_val not in [0x00, 0x01, 0x02, 0x03, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x19, 0x1b]:
+                        analysis['suspicious_patterns'].append({
+                            'type': 'unknown_mode',
+                            'position': position,
+                            'hex': byte_hex,
+                            'value': byte_val,
+                            'possible_i_see': byte_val > 0x08
+                        })
+                
+                # Check for non-zero values in typically unused positions
+                unused_positions = [12, 17, 19]  # Add more as we discover them
+                if position in unused_positions and byte_val != 0:
+                    analysis['unknown_segments'][position] = {
+                        'hex': byte_hex,
+                        'value': byte_val,
+                        'binary': f"{byte_val:08b}"
+                    }
+        
+    except (ValueError, IndexError) as e:
+        analysis['parse_error'] = str(e)
+    
+    return analysis
+
 def get_wind_speed(segment: str) -> WindSpeed:
     """Parse wind speed from segment"""
     speed_map = {
@@ -246,24 +356,163 @@ def is_error_states_payload(payload: str) -> bool:
         return False
     return payload[2:4] in ['62', '7b'] and payload[10:12] == '04'
 
+def is_energy_states_payload(payload: str) -> bool:
+    """Check if payload contains energy/status data (SwiCago group 06)"""
+    if len(payload) < 12:
+        return False
+    return payload[2:4] in ['62', '7b'] and payload[10:12] == '06'
+
+def estimate_power_consumption(compressor_frequency: int, mode: DriveMode, fan_speed: WindSpeed) -> float:
+    """Estimate power consumption based on compressor frequency and operational parameters
+    
+    This is a rough estimation based on empirical data from heat pump literature.
+    Actual consumption varies significantly based on outdoor conditions, efficiency rating, etc.
+    
+    Args:
+        compressor_frequency: Raw compressor frequency value (0-255 typical)
+        mode: Operating mode (affects base consumption)
+        fan_speed: Fan speed (affects additional consumption)
+        
+    Returns:
+        Estimated power consumption in Watts
+    """
+    if compressor_frequency == 0:
+        # Unit is not actively operating - only standby power
+        return 10.0  # Typical standby consumption
+    
+    # Base power estimation from compressor frequency
+    # This is a rough linear approximation - real curves are more complex
+    frequency_factor = compressor_frequency / 255.0  # Normalize to 0-1
+    
+    # Mode-based base consumption (typical values for residential units)
+    mode_base_watts = {
+        DriveMode.COOLER: 1200,     # Cooling tends to use more power
+        DriveMode.HEATER: 1000,     # Heating can be more efficient
+        DriveMode.AUTO: 1100,       # Average
+        DriveMode.DEHUM: 800,       # Dehumidification uses less
+        DriveMode.FAN: 50,          # Fan only
+        DriveMode.AUTO_COOLER: 1200,
+        DriveMode.AUTO_HEATER: 1000,
+    }
+    
+    base_power = mode_base_watts.get(mode, 1000)
+    
+    # Compressor power scales roughly with frequency
+    compressor_power = base_power * frequency_factor
+    
+    # Fan power addition
+    fan_power_map = {
+        WindSpeed.AUTO: 50,      # Variable
+        WindSpeed.LEVEL_1: 30,   # Low speed
+        WindSpeed.LEVEL_2: 60,   # Medium-low
+        WindSpeed.LEVEL_3: 90,   # Medium-high
+        WindSpeed.LEVEL_FULL: 120, # High speed
+    }
+    
+    fan_power = fan_power_map.get(fan_speed, 50)
+    
+    # Total estimated power
+    total_power = compressor_power + fan_power + 20  # +20W for control electronics
+    
+    return round(total_power, 1)
+
+def parse_energy_states(payload: str, general_states: Optional[GeneralStates] = None) -> Optional[EnergyStates]:
+    """Parse energy/status states from hex payload (SwiCago group 06)
+    
+    Based on SwiCago implementation:
+    - data[3] = compressor frequency
+    - data[4] = operating status (boolean)
+    
+    Args:
+        payload: Hex payload string
+        general_states: Optional general states for power estimation context
+    """
+    if len(payload) < 24:  # Need at least enough bytes for data[4]
+        return None
+    
+    try:
+        # Extract compressor frequency from data[3] (position 18-19 in hex string)
+        compressor_frequency = int(payload[18:20], 16)
+        
+        # Extract operating status from data[4] (position 20-21 in hex string) 
+        operating = int(payload[20:22], 16) > 0
+        
+        # Estimate power consumption if we have context
+        estimated_power = None
+        if general_states:
+            estimated_power = estimate_power_consumption(
+                compressor_frequency,
+                general_states.drive_mode,
+                general_states.wind_speed
+            )
+        
+        return EnergyStates(
+            compressor_frequency=compressor_frequency,
+            operating=operating,
+            estimated_power_watts=estimated_power,
+        )
+    except (ValueError, IndexError):
+        return None
+
 def parse_general_states(payload: str) -> Optional[GeneralStates]:
-    """Parse general states from hex payload"""
+    """Parse general states from hex payload with enhanced SwiCago-based parsing
+    
+    Enhanced with SwiCago insights:
+    - Dual temperature parsing modes (segment vs direct)
+    - Wide vane adjustment flag detection
+    - i-See sensor detection from mode byte
+    """
     if len(payload) < 42:
         return None
     
     try:
         power_on_off = get_on_off_status(payload[16:18])
-        temperature = get_normalized_temperature(int(payload[32:34], 16))
-        drive_mode = get_drive_mode(payload[18:20])
-        wind_speed = get_wind_speed(payload[22:24])
-        right_vertical_wind_direction = get_vertical_wind_direction(payload[24:26])
+        
+        # Enhanced temperature parsing (SwiCago logic)
+        # Check for direct temperature mode first (data[11] != 0x00)
+        temp_mode = False
+        temperature = 220  # Default to 22.0°C
+        
+        # Our payload structure starts with 'fc62013010' (5 bytes) then data begins
+        # So data[0] is at position 10-11, data[1] at 12-13, etc.
+        # data[5] (temp segment) would be at position 20-21
+        # data[11] (direct temp) would be at position 32-33
+        
+        if len(payload) > 33:  # Check if we have data[11] position (32-33)
+            temp_direct_raw = int(payload[32:34], 16)  # data[11] in SwiCago
+            if temp_direct_raw != 0x00:
+                # Direct temperature mode (SwiCago tempMode = true)
+                temp_mode = True
+                temp_celsius = (temp_direct_raw - 128) / 2.0
+                temperature = int(temp_celsius * 10)  # Convert to 0.1°C units
+            else:
+                # Segment-based temperature (SwiCago tempMode = false)
+                temp_mode = False
+                if len(payload) > 21:  # Check if we have data[5] position (20-21)
+                    temperature = get_normalized_temperature(int(payload[20:22], 16))  # data[5] in SwiCago
+        elif len(payload) > 21:  # Fallback to segment-based parsing if we don't have data[11]
+            temperature = get_normalized_temperature(int(payload[20:22], 16))
+        
+        # Enhanced mode parsing with i-See sensor detection
+        mode_byte = int(payload[18:20], 16)  # data[4] in SwiCago
+        drive_mode, i_see_active, raw_mode = parse_mode_with_i_see(mode_byte)
+        
+        wind_speed = get_wind_speed(payload[22:24])  # data[6] in SwiCago
+        right_vertical_wind_direction = get_vertical_wind_direction(payload[24:26])  # data[7] in SwiCago
         left_vertical_wind_direction = get_vertical_wind_direction(payload[40:42])
-        horizontal_wind_direction = get_horizontal_wind_direction(payload[30:32])
+        
+        # Enhanced wide vane parsing with adjustment flag (SwiCago)
+        wide_vane_data = int(payload[30:32], 16) if len(payload) > 31 else 0  # data[10] in SwiCago
+        horizontal_wind_direction = get_horizontal_wind_direction(f"{wide_vane_data & 0x0F:02x}")  # Lower 4 bits
+        wide_vane_adjustment = (wide_vane_data & 0xF0) == 0x80  # Upper 4 bits = 0x80
         
         # Extra states
         dehum_setting = int(payload[34:36], 16) if len(payload) > 35 else 0
         is_power_saving = int(payload[36:38], 16) > 0 if len(payload) > 37 else False
         wind_and_wind_break_direct = int(payload[38:40], 16) if len(payload) > 39 else 0
+        
+        # Analyze undocumented bits for research purposes
+        undocumented_analysis = analyze_undocumented_bits(payload)
         
         return GeneralStates(
             power_on_off=power_on_off,
@@ -276,6 +525,12 @@ def parse_general_states(payload: str) -> Optional[GeneralStates]:
             dehum_setting=dehum_setting,
             is_power_saving=is_power_saving,
             wind_and_wind_break_direct=wind_and_wind_break_direct,
+            # Enhanced functionality based on SwiCago
+            i_see_sensor=i_see_active,
+            mode_raw_value=raw_mode,
+            wide_vane_adjustment=wide_vane_adjustment,
+            temp_mode=temp_mode,
+            undocumented_flags=undocumented_analysis if undocumented_analysis.get('suspicious_patterns') or undocumented_analysis.get('unknown_segments') else None,
         )
     except (ValueError, IndexError):
         return None
@@ -320,7 +575,7 @@ def parse_error_states(payload: str) -> Optional[ErrorStates]:
         return None
 
 def parse_code_values(code_values: List[str]) -> ParsedDeviceState:
-    """Parse a list of code values and return combined device state"""
+    """Parse a list of code values and return combined device state with energy information"""
     parsed_state = ParsedDeviceState()
     
     for hex_value in code_values:
@@ -338,6 +593,9 @@ def parse_code_values(code_values: List[str]) -> ParsedDeviceState:
             parsed_state.sensors = parse_sensor_states(hex_lower)
         elif is_error_states_payload(hex_lower):
             parsed_state.errors = parse_error_states(hex_lower)
+        elif is_energy_states_payload(hex_lower):
+            # Parse energy states with context from general states if available
+            parsed_state.energy = parse_energy_states(hex_lower, parsed_state.general)
     
     return parsed_state
 

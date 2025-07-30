@@ -8,12 +8,16 @@ for Mitsubishi MAC-577IF-2E devices.
 
 import xml.etree.ElementTree as ET
 from typing import Dict, Optional, Any
+import logging
+
 from .mitsubishi_api import MitsubishiAPI
 from .mitsubishi_parser import (
     PowerOnOff, DriveMode, WindSpeed, VerticalWindDirection, 
     HorizontalWindDirection, GeneralStates, ParsedDeviceState, 
     parse_code_values, generate_general_command, generate_extend08_command
 )
+
+logger = logging.getLogger(__name__)
 
 
 class MitsubishiController:
@@ -29,15 +33,15 @@ class MitsubishiController:
         api = MitsubishiAPI(device_ip=device_ip, encryption_key=encryption_key)
         return cls(api)
         
-    def fetch_status(self, debug: bool = False, detect_capabilities: bool = True) -> bool:
+    def fetch_status(self, detect_capabilities: bool = True) -> bool:
         """Fetch current device status and optionally detect capabilities"""
-        response = self.api.send_status_request(debug=debug)
+        response = self.api.send_status_request()
         if response:
             self._parse_status_response(response)
             
             # Optionally perform capability detection
             if detect_capabilities:
-                self._detect_capabilities_from_response(response, debug=debug)
+                self._detect_capabilities_from_response(response)
             
             return True
         return False
@@ -68,15 +72,14 @@ class MitsubishiController:
                 self.state.serial = serial_elem.text
 
         except ET.ParseError as e:
-            print(f"Error parsing status response: {e}")
+            logger.error(f"Error parsing status response: {e}")
     
-    def _detect_capabilities_from_response(self, response: str, debug: bool = False):
+    def _detect_capabilities_from_response(self, response: str):
         """Detect capabilities from the status response"""
         try:
             from .mitsubishi_capabilities import CapabilityDetector, DeviceCapabilities
             
-            if debug:
-                print("🔍 Detecting capabilities from status response...")
+            logger.debug("🔍 Detecting capabilities from status response...")
             
             # Create a temporary capability detector to analyze the response
             temp_detector = CapabilityDetector(api=self.api)
@@ -109,11 +112,9 @@ class MitsubishiController:
                     # Analyze the ProfileCode for capabilities
                     try:
                         analysis = temp_detector.capabilities.analyze_profile_code(elem.text)
-                        if debug:
-                            print(f"✅ ProfileCode {profile_key} analyzed successfully")
+                        logger.debug(f"✅ ProfileCode {profile_key} analyzed successfully")
                     except Exception as e:
-                        if debug:
-                            print(f"⚠️ Failed to analyze ProfileCode {profile_key}: {e}")
+                        logger.debug(f"⚠️ Failed to analyze ProfileCode {profile_key}: {e}")
                     
                     # Try to extract model info from profile codes
                     if not temp_detector.capabilities.device_model and len(elem.text) > 10:
@@ -138,22 +139,20 @@ class MitsubishiController:
                 temp_detector._analyze_parsed_state(self.state)
             
             # Analyze group codes to validate capabilities
-            temp_detector._analyze_group_codes(debug=debug)
+            temp_detector._analyze_group_codes()
             
             # Attach the capabilities to our state
             self.state.capabilities = temp_detector.capabilities
             
-            if debug:
-                print(f"✅ Capabilities detected: {len(temp_detector.capabilities.capabilities)} found")
+            logger.debug(f"✅ Capabilities detected: {len(temp_detector.capabilities.capabilities)} found")
                 
         except Exception as e:
-            if debug:
-                print(f"⚠️ Error detecting capabilities: {e}")
+            logger.debug(f"⚠️ Error detecting capabilities: {e}")
     
     def _check_state_available(self) -> bool:
         """Check if device state is available"""
         if not self.state.general:
-            print("❌ No device state available. Fetch status first.")
+            logger.info("❌ No device state available. Fetch status first.")
             return False
         return True
     
@@ -172,16 +171,16 @@ class MitsubishiController:
             wind_and_wind_break_direct=overrides.get('wind_and_wind_break_direct', self.state.general.wind_and_wind_break_direct),
         )
 
-    def set_power(self, power_on: bool, debug: bool = False) -> bool:
+    def set_power(self, power_on: bool) -> bool:
         """Set power on/off"""
         if not self._check_state_available():
             return False
             
         new_power = PowerOnOff.ON if power_on else PowerOnOff.OFF
         updated_state = self._create_updated_state(power_on_off=new_power)
-        return self._send_general_control_command(updated_state, {'power_on_off': True}, debug=debug)
+        return self._send_general_control_command(updated_state, {'power_on_off': True})
 
-    def set_temperature(self, temperature_celsius: float, debug: bool = False) -> bool:
+    def set_temperature(self, temperature_celsius: float) -> bool:
         """Set target temperature in Celsius"""
         if not self._check_state_available():
             return False
@@ -189,35 +188,35 @@ class MitsubishiController:
         # Convert to 0.1°C units and validate range
         temp_units = int(temperature_celsius * 10)
         if temp_units < 160 or temp_units > 320:  # 16°C to 32°C
-            print(f"❌ Temperature {temperature_celsius}°C is out of range (16-32°C)")
+            logger.info(f"❌ Temperature {temperature_celsius}°C is out of range (16-32°C)")
             return False
             
         updated_state = self._create_updated_state(temperature=temp_units)
-        return self._send_general_control_command(updated_state, {'temperature': True}, debug=debug)
+        return self._send_general_control_command(updated_state, {'temperature': True})
 
-    def set_mode(self, mode: DriveMode, debug: bool = False) -> bool:
+    def set_mode(self, mode: DriveMode) -> bool:
         """Set operating mode"""
         if not self._check_state_available():
             return False
             
         updated_state = self._create_updated_state(drive_mode=mode)
-        return self._send_general_control_command(updated_state, {'drive_mode': True}, debug=debug)
+        return self._send_general_control_command(updated_state, {'drive_mode': True})
 
-    def set_fan_speed(self, speed: WindSpeed, debug: bool = False) -> bool:
+    def set_fan_speed(self, speed: WindSpeed) -> bool:
         """Set fan speed"""
         if not self._check_state_available():
             return False
             
         updated_state = self._create_updated_state(wind_speed=speed)
-        return self._send_general_control_command(updated_state, {'wind_speed': True}, debug=debug)
+        return self._send_general_control_command(updated_state, {'wind_speed': True})
 
-    def set_vertical_vane(self, direction: VerticalWindDirection, side: str = 'right', debug: bool = False) -> bool:
+    def set_vertical_vane(self, direction: VerticalWindDirection, side: str = 'right') -> bool:
         """Set vertical vane direction (right or left side)"""
         if not self._check_state_available():
             return False
         
         if side.lower() not in ['right', 'left']:
-            print("❌ Side must be 'right' or 'left'")
+            logger.info("❌ Side must be 'right' or 'left'")
             return False
             
         if side.lower() == 'right':
@@ -225,96 +224,90 @@ class MitsubishiController:
         else:
             updated_state = self._create_updated_state(vertical_wind_direction_left=direction)
             
-        return self._send_general_control_command(updated_state, {'up_down_wind_direct': True}, debug=debug)
+        return self._send_general_control_command(updated_state, {'up_down_wind_direct': True})
 
-    def set_horizontal_vane(self, direction: HorizontalWindDirection, debug: bool = False) -> bool:
+    def set_horizontal_vane(self, direction: HorizontalWindDirection) -> bool:
         """Set horizontal vane direction"""
         if not self._check_state_available():
             return False
             
         updated_state = self._create_updated_state(horizontal_wind_direction=direction)
-        return self._send_general_control_command(updated_state, {'left_right_wind_direct': True}, debug=debug)
+        return self._send_general_control_command(updated_state, {'left_right_wind_direct': True})
 
-    def set_dehumidifier(self, setting: int, debug: bool = False) -> bool:
+    def set_dehumidifier(self, setting: int) -> bool:
         """Set dehumidifier level (0-100)"""
         if not self._check_state_available():
             return False
             
         if setting < 0 or setting > 100:
-            print("❌ Dehumidifier setting must be between 0-100")
+            logger.info("❌ Dehumidifier setting must be between 0-100")
             return False
             
         updated_state = self._create_updated_state(dehum_setting=setting)
-        return self._send_extend08_command(updated_state, {'dehum': True}, debug=debug)
+        return self._send_extend08_command(updated_state, {'dehum': True})
 
-    def set_power_saving(self, enabled: bool, debug: bool = False) -> bool:
+    def set_power_saving(self, enabled: bool) -> bool:
         """Enable or disable power saving mode"""
         if not self._check_state_available():
             return False
             
         updated_state = self._create_updated_state(is_power_saving=enabled)
-        return self._send_extend08_command(updated_state, {'power_saving': True}, debug=debug)
+        return self._send_extend08_command(updated_state, {'power_saving': True})
 
-    def send_buzzer_command(self, enabled: bool = True, debug: bool = False) -> bool:
+    def send_buzzer_command(self, enabled: bool = True) -> bool:
         """Send buzzer control command"""
         if not self._check_state_available():
             return False
             
-        return self._send_extend08_command(self.state.general, {'buzzer': enabled}, debug=debug)
+        return self._send_extend08_command(self.state.general, {'buzzer': enabled})
 
-    def _send_general_control_command(self, state: GeneralStates, controls: Dict[str, bool], debug: bool = False) -> bool:
+    def _send_general_control_command(self, state: GeneralStates, controls: Dict[str, bool]) -> bool:
         """Send a general control command to the device"""
         # Generate the hex command
         hex_command = generate_general_command(state, controls)
         
-        if debug:
-            print(f"🔧 Sending command: {hex_command}")
+        logger.debug(f"🔧 Sending command: {hex_command}")
             
-        response = self.api.send_hex_command(hex_command, debug=debug)
+        response = self.api.send_hex_command(hex_command)
         
         if response:
-            if debug:
-                print("✅ Command sent successfully")
+            logger.debug("✅ Command sent successfully")
             # Update our local state to reflect the change
             self.state.general = state
             return True
         else:
-            if debug:
-                print("❌ Command failed")
+            logger.debug("❌ Command failed")
             return False
 
-    def _send_extend08_command(self, state: GeneralStates, controls: Dict[str, bool], debug: bool = False) -> bool:
+    def _send_extend08_command(self, state: GeneralStates, controls: Dict[str, bool]) -> bool:
         """Send an extend08 command for advanced features"""
         # Generate the hex command
         hex_command = generate_extend08_command(state, controls)
         
-        if debug:
-            print(f"🔧 Sending extend08 command: {hex_command}")
+        logger.debug(f"🔧 Sending extend08 command: {hex_command}")
             
-        response = self.api.send_hex_command(hex_command, debug=debug)
+        response = self.api.send_hex_command(hex_command)
         
         if response:
-            if debug:
-                print("✅ Extend08 command sent successfully")
+            logger.debug("✅ Extend08 command sent successfully")
             # Update our local state to reflect the change
             self.state.general = state
             return True
         else:
-            if debug:
-                print("❌ Extend08 command failed")
+            logger.debug("❌ Extend08 command failed")
             return False
 
-    def enable_echonet(self, debug: bool = False) -> bool:
+    def enable_echonet(self) -> bool:
         """Send ECHONET enable command"""
-        response = self.api.send_echonet_enable(debug=debug)
+        response = self.api.send_echonet_enable()
         return response is not None
 
-    def get_unit_info(self, debug: bool = False) -> Optional[Dict[str, Any]]:
+    def get_unit_info(self) -> Optional[Dict[str, Any]]:
         """Get detailed unit information from the admin interface"""
-        unit_info = self.api.get_unit_info(debug=debug)
+        unit_info = self.api.get_unit_info()
         
-        if unit_info and debug:
-            print(f"✅ Unit info retrieved: {len(unit_info.get('adaptor_info', {}))} adaptor fields, {len(unit_info.get('unit_info', {}))} unit fields")
+        if unit_info:
+            logger.debug(f"✅ Unit info retrieved: {len(unit_info.get('adaptor_info', {}))} adaptor fields, {len(unit_info.get('unit_info', {}))} unit fields")
         
         return unit_info
 

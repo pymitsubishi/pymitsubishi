@@ -32,7 +32,8 @@ class WindSpeed(Enum):
     LEVEL_1 = 1
     LEVEL_2 = 2
     LEVEL_3 = 3
-    LEVEL_FULL = 5
+    LEVEL_4 = 5
+    LEVEL_FULL = 6
 
 class VerticalWindDirection(Enum):
     AUTO = 0
@@ -308,12 +309,14 @@ def analyze_undocumented_bits(payload: str) -> Dict[str, Any]:
 
 def get_wind_speed(segment: str) -> WindSpeed:
     """Parse wind speed from segment"""
+    print(f"Parsing wind speed from segment: {segment}")
     speed_map = {
         '00': WindSpeed.AUTO,
         '01': WindSpeed.LEVEL_1,
         '02': WindSpeed.LEVEL_2,
         '03': WindSpeed.LEVEL_3,
-        '05': WindSpeed.LEVEL_FULL,
+        '05': WindSpeed.LEVEL_4,
+        '06': WindSpeed.LEVEL_FULL,
     }
     return speed_map.get(segment, WindSpeed.AUTO)
 

@@ -112,13 +112,13 @@ class TestModeAndStatusParsing:
     def test_wind_speed_parsing(self):
         """Test wind speed parsing with real speed codes."""
         # Test that wind speed parsing works with common codes
-        speed_codes = ["00", "01", "02", "03", "05", "ff"]
+        speed_codes = ["00", "01", "02", "03", "05", "06", "ff"]
         
         for code in speed_codes:
             speed = get_wind_speed(code)
             assert isinstance(speed, WindSpeed)
             assert speed in [WindSpeed.AUTO, WindSpeed.LEVEL_1, WindSpeed.LEVEL_2, 
-                           WindSpeed.LEVEL_3, WindSpeed.LEVEL_FULL]
+                           WindSpeed.LEVEL_3, WindSpeed.LEVEL_4, WindSpeed.LEVEL_FULL]
 
 
 class TestCodeValueParsing:

@@ -155,7 +155,7 @@ class MitsubishiAPI:
 
         headers = {
             'Host': f'{self.device_ip}:80',
-            'Content-Type': 'text/plain;chrset=UTF-8',
+            'Content-Type': 'text/plain; charset=UTF-8',
             'Connection': 'keep-alive',
             'Proxy-Connection': 'keep-alive',
             'Accept': '*/*',

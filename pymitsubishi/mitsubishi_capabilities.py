@@ -10,9 +10,12 @@ import xml.etree.ElementTree as ET
 from typing import Dict, List, Optional, Set, Any
 from dataclasses import dataclass, field
 from enum import Enum
+import logging
 
 from .mitsubishi_api import MitsubishiAPI
 from .mitsubishi_parser import parse_code_values
+
+logger = logging.getLogger(__name__)
 
 
 class CapabilityType(Enum):
@@ -129,17 +132,17 @@ class DeviceCapabilities:
             # as they're not CapabilityType enum values, just strings
             # This prevents the get_status_summary error
             
-            print(f"🔍 ProfileCode Analysis Complete:")
-            print(f"  Device Type: {device_type}")
-            print(f"  Version Info: 0x{version_info:04x}")
-            print(f"  Feature Flags: 0x{feature_flags:04x}")
-            print(f"  Capability Field: 0x{capability_field:04x}")
-            print(f"  Inferred Capabilities: {inferred_capabilities}")
+            logger.info(f"🔍 ProfileCode Analysis Complete:")
+            logger.info(f"  Device Type: {device_type}")
+            logger.info(f"  Version Info: 0x{version_info:04x}")
+            logger.info(f"  Feature Flags: 0x{feature_flags:04x}")
+            logger.info(f"  Capability Field: 0x{capability_field:04x}")
+            logger.info(f"  Inferred Capabilities: {inferred_capabilities}")
             
             return analysis
             
         except Exception as e:
-            print(f"❌ Failed to analyze ProfileCode: {e}")
+            logger.error(f"❌ Failed to analyze ProfileCode: {e}")
             raise
     
     def to_dict(self) -> Dict[str, Any]:
@@ -187,40 +190,40 @@ class CapabilityDetector:
         self.api = api
         self.capabilities = DeviceCapabilities()
         
-    def detect_all_capabilities(self, debug: bool = False) -> DeviceCapabilities:
+    def detect_all_capabilities(self) -> DeviceCapabilities:
         """Perform comprehensive capability detection with ProfileCode analysis"""
-        print("🔍 Starting enhanced device capability detection...")
+        logger.info("🔍 Starting enhanced device capability detection...")
         
         # Step 1: Basic device information and ProfileCode analysis
-        self._detect_device_info(debug=debug)
+        self._detect_device_info()
         
         # Step 2: Analyze status response for supported features
-        self._analyze_status_response(debug=debug)
+        self._analyze_status_response()
         
         # Step 3: Analyze group codes for capability validation
-        self._analyze_group_codes(debug=debug)
+        self._analyze_group_codes()
         
         # Step 4: Test specific capability probes
-        self._probe_specific_capabilities(debug=debug)
+        self._probe_specific_capabilities()
         
         # Step 5: Test ECHONET support
-        self._test_echonet_support(debug=debug)
+        self._test_echonet_support()
         
         # Step 6: Validate ProfileCode predictions against actual data
-        self._validate_profile_predictions(debug=debug)
+        self._validate_profile_predictions()
         
         # Set detection timestamp
         from datetime import datetime
         self.capabilities.detection_timestamp = datetime.now().isoformat()
-        
-        print("✅ Enhanced capability detection completed")
+
+        logger.info("✅ Enhanced capability detection completed")
         return self.capabilities
     
-    def _detect_device_info(self, debug: bool = False):
+    def _detect_device_info(self):
         """Detect basic device information and analyze ProfileCodes"""
-        print("📋 Detecting device information and analyzing ProfileCodes...")
+        logger.info("📋 Detecting device information and analyzing ProfileCodes...")
         
-        response = self.api.send_status_request(debug=debug)
+        response = self.api.send_status_request()
         if response:
             try:
                 root = ET.fromstring(response)
@@ -249,22 +252,22 @@ class CapabilityDetector:
                         # Analyze the ProfileCode for capabilities
                         try:
                             analysis = self.capabilities.analyze_profile_code(elem.text)
-                            print(f"✅ ProfileCode {profile_key} analyzed successfully")
+                            logger.info(f"✅ ProfileCode {profile_key} analyzed successfully")
                         except Exception as e:
-                            print(f"⚠️ Failed to analyze ProfileCode {profile_key}: {e}")
+                            logger.info(f"⚠️ Failed to analyze ProfileCode {profile_key}: {e}")
                         
                         # Try to extract model info from profile codes
                         if not self.capabilities.device_model and len(elem.text) > 10:
                             self.capabilities.device_model = elem.text[:12]
                 
             except ET.ParseError as e:
-                print(f"⚠️ Error parsing device info: {e}")
+                logger.error(f"⚠️ Error parsing device info: {e}")
     
-    def _analyze_status_response(self, debug: bool = False):
+    def _analyze_status_response(self):
         """Analyze status response to determine supported features"""
-        print("🔬 Analyzing status response for capabilities...")
+        logger.info("🔬 Analyzing status response for capabilities...")
         
-        response = self.api.send_status_request(debug=debug)
+        response = self.api.send_status_request()
         if response:
             try:
                 root = ET.fromstring(response)
@@ -289,7 +292,7 @@ class CapabilityDetector:
                     self._analyze_parsed_state(parsed_state)
                     
             except ET.ParseError as e:
-                print(f"⚠️ Error analyzing status response: {e}")
+                logger.error(f"⚠️ Error analyzing status response: {e}")
     
     def _analyze_parsed_state(self, parsed_state):
         """Analyze parsed state to determine capabilities"""
@@ -326,9 +329,9 @@ class CapabilityDetector:
                     metadata={'sensor_type': 'outdoor_temperature', 'source': 'parsed_state'}
                 )
     
-    def _analyze_group_codes(self, debug: bool = False):
+    def _analyze_group_codes(self):
         """Analyze supported group codes to validate ProfileCode predictions"""
-        print("📊 Analyzing group codes to validate capabilities...")
+        logger.info("📊 Analyzing group codes to validate capabilities...")
         
         # Map group codes to capabilities based on our research
         group_code_capabilities = {
@@ -355,15 +358,14 @@ class CapabilityDetector:
                         metadata={'source': 'group_code', 'group_code': group_code}
                     )
         
-        if debug:
-            print(f"📋 Supported group codes: {sorted(self.capabilities.supported_group_codes)}")
+        logger.debug(f"📋 Supported group codes: {sorted(self.capabilities.supported_group_codes)}")
     
-    def _validate_profile_predictions(self, debug: bool = False):
+    def _validate_profile_predictions(self):
         """Validate ProfileCode predictions against actual group code data"""
-        print("✅ Validating ProfileCode predictions...")
+        logger.info("✅ Validating ProfileCode predictions...")
         
         if not self.capabilities.profile_analysis:
-            print("⚠️ No ProfileCode analysis available for validation")
+            logger.info("⚠️ No ProfileCode analysis available for validation")
             return
         
         predictions = self.capabilities.profile_analysis.inferred_capabilities
@@ -374,29 +376,29 @@ class CapabilityDetector:
                 cap = self.capabilities.get_capability(predicted_cap)
                 if cap and cap.metadata.get('validated_by_group_code'):
                     validated.append(predicted_cap)
-                    print(f"  ✅ {predicted_cap} - VALIDATED by group code {cap.metadata['validated_by_group_code']}")
+                    logger.info(f"  ✅ {predicted_cap} - VALIDATED by group code {cap.metadata['validated_by_group_code']}")
                 else:
-                    print(f"  🔍 {predicted_cap} - predicted but not validated by group codes")
+                    logger.info(f"  🔍 {predicted_cap} - predicted but not validated by group codes")
             else:
-                print(f"  ❌ {predicted_cap} - predicted but not confirmed")
+                logger.info(f"  ❌ {predicted_cap} - predicted but not confirmed")
         
-        print(f"🎯 Validation Summary: {len(validated)}/{len(predictions)} predictions validated")
+        logger.info(f"🎯 Validation Summary: {len(validated)}/{len(predictions)} predictions validated")
     
-    def _probe_specific_capabilities(self, debug: bool = False):
+    def _probe_specific_capabilities(self):
         """Probe for specific capabilities using test commands"""
-        print("🧪 Probing specific capabilities...")
+        logger.info("🧪 Probing specific capabilities...")
         # Keep existing logic for buzzer, etc.
         pass
     
-    def _test_echonet_support(self, debug: bool = False):
+    def _test_echonet_support(self):
         """Test ECHONET support capability"""
-        print("🌐 Testing ECHONET support...")
+        logger.info("🌐 Testing ECHONET support...")
         # Keep existing logic
         pass
     
     def analyze_profile_code_only(self, profile_code_hex: str) -> DeviceCapabilities:
         """Analyze just a ProfileCode without needing device connection"""
-        print("🔍 Analyzing ProfileCode for capabilities...")
+        logger.info("🔍 Analyzing ProfileCode for capabilities...")
         
         try:
             analysis = self.capabilities.analyze_profile_code(profile_code_hex)
@@ -404,12 +406,12 @@ class CapabilityDetector:
             # Set basic info
             from datetime import datetime
             self.capabilities.detection_timestamp = datetime.now().isoformat()
-            
-            print("✅ ProfileCode analysis completed")
+
+            logger.info("✅ ProfileCode analysis completed")
             return self.capabilities
             
         except Exception as e:
-            print(f"❌ ProfileCode analysis failed: {e}")
+            logger.error(f"❌ ProfileCode analysis failed: {e}")
             raise
     
     def save_capabilities(self, filename: str = "enhanced_device_capabilities.json"):
@@ -420,9 +422,9 @@ class CapabilityDetector:
             capabilities_dict = self.capabilities.to_dict()
             with open(filename, 'w') as f:
                 json.dump(capabilities_dict, f, indent=2)
-            print(f"💾 Enhanced capabilities saved to {filename}")
+            logger.info(f"💾 Enhanced capabilities saved to {filename}")
         except Exception as e:
-            print(f"❌ Failed to save capabilities: {e}")
+            logger.error(f"❌ Failed to save capabilities: {e}")
     
     def load_capabilities(self, filename: str = "enhanced_device_capabilities.json") -> bool:
         """Load capabilities from a JSON file"""
@@ -472,12 +474,12 @@ class CapabilityDetector:
                     inferred_capabilities=[CapabilityType(cap) for cap in pa_data['inferred_capabilities']],
                     raw_data=bytes.fromhex(pa_data['raw_data'])
                 )
-            
-            print(f"📂 Capabilities loaded from {filename}")
+
+            logger.info(f"📂 Capabilities loaded from {filename}")
             return True
             
         except Exception as e:
-            print(f"❌ Failed to load capabilities: {e}")
+            logger.error(f"❌ Failed to load capabilities: {e}")
             return False
 
 

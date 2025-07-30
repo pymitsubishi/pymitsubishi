@@ -309,7 +309,6 @@ def analyze_undocumented_bits(payload: str) -> Dict[str, Any]:
 
 def get_wind_speed(segment: str) -> WindSpeed:
     """Parse wind speed from segment"""
-    print(f"Parsing wind speed from segment: {segment}")
     speed_map = {
         '00': WindSpeed.AUTO,
         '01': WindSpeed.LEVEL_1,

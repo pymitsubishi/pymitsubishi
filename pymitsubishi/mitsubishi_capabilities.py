@@ -11,9 +11,11 @@ from typing import Dict, List, Optional, Set, Any
 from dataclasses import dataclass, field
 from enum import Enum
 import logging
+from datetime import datetime
+import json
 
 from .mitsubishi_api import MitsubishiAPI
-from .mitsubishi_parser import parse_code_values
+from .mitsubishi_parser import parse_code_values, PowerOnOff
 
 logger = logging.getLogger(__name__)
 
@@ -213,7 +215,6 @@ class CapabilityDetector:
         self._validate_profile_predictions()
         
         # Set detection timestamp
-        from datetime import datetime
         self.capabilities.detection_timestamp = datetime.now().isoformat()
 
         logger.info("✅ Enhanced capability detection completed")
@@ -298,7 +299,6 @@ class CapabilityDetector:
         """Analyze parsed state to determine capabilities"""
         # Standard capabilities from existing logic
         if parsed_state.general:
-            from .mitsubishi_parser import PowerOnOff
             self.capabilities.capabilities[CapabilityType.POWER_CONTROL] = DeviceCapability(
                 capability_type=CapabilityType.POWER_CONTROL,
                 supported=True,
@@ -404,7 +404,6 @@ class CapabilityDetector:
             analysis = self.capabilities.analyze_profile_code(profile_code_hex)
             
             # Set basic info
-            from datetime import datetime
             self.capabilities.detection_timestamp = datetime.now().isoformat()
 
             logger.info("✅ ProfileCode analysis completed")
@@ -416,8 +415,6 @@ class CapabilityDetector:
     
     def save_capabilities(self, filename: str = "enhanced_device_capabilities.json"):
         """Save detected capabilities to a JSON file"""
-        import json
-        
         try:
             capabilities_dict = self.capabilities.to_dict()
             with open(filename, 'w') as f:
@@ -428,8 +425,6 @@ class CapabilityDetector:
     
     def load_capabilities(self, filename: str = "enhanced_device_capabilities.json") -> bool:
         """Load capabilities from a JSON file"""
-        import json
-        
         try:
             with open(filename, 'r') as f:
                 data = json.load(f)

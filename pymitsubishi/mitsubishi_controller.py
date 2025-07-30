@@ -16,6 +16,7 @@ from .mitsubishi_parser import (
     HorizontalWindDirection, GeneralStates, ParsedDeviceState, 
     parse_code_values, generate_general_command, generate_extend08_command
 )
+from .mitsubishi_capabilities import CapabilityDetector, DeviceCapabilities
 
 logger = logging.getLogger(__name__)
 
@@ -77,8 +78,6 @@ class MitsubishiController:
     def _detect_capabilities_from_response(self, response: str):
         """Detect capabilities from the status response"""
         try:
-            from .mitsubishi_capabilities import CapabilityDetector, DeviceCapabilities
-            
             logger.debug("🔍 Detecting capabilities from status response...")
             
             # Create a temporary capability detector to analyze the response

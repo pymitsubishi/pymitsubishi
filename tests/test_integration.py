@@ -4,6 +4,7 @@ Integration tests for pymitsubishi using real device response data.
 These tests use sanitized data captured from actual Mitsubishi MAC-577IF-2E devices
 to ensure the library works correctly with real-world responses.
 """
+import base64
 
 import pytest
 import json
@@ -105,32 +106,35 @@ class TestMitsubishiAPIIntegration:
         # Mock the HTTP response
         mock_response = Mock()
         mock_response.status_code = 200
-        mock_response.text = '<?xml version="1.0" encoding="UTF-8"?><ESV>mocked_encrypted_data</ESV>'
+        mock_response.text = ('<?xml version="1.0" encoding="UTF-8"?><ESV>'
+                              + base64.b64encode(b"mocked_encrypted_data").decode('ascii')
+                              + '</ESV>')
         mock_post.return_value = mock_response
         
         # Mock the decryption to return our real XML
         api = MitsubishiAPI("192.168.1.100")
         
         # Mock the session.post method instead of requests.post
-        with patch.object(api.session, 'post') as mock_session_post:
+        with (
+                patch.object(api.session, 'post') as mock_session_post,
+                patch.object(api, 'decrypt_payload') as mock_decrypt,
+              ):
             mock_session_post.return_value = mock_response
-            
-            with patch.object(api, 'decrypt_payload') as mock_decrypt:
-                mock_decrypt.return_value = REAL_DEVICE_XML_RESPONSE
-                
-                response = api.send_status_request()
-                
-                assert response == REAL_DEVICE_XML_RESPONSE
-                assert "AA:BB:CC:DD:EE:FF" in response
-                assert "1234567890" in response
-                assert "PROFILECODE" in response
+            mock_decrypt.return_value = REAL_DEVICE_XML_RESPONSE.encode('utf-8')
+
+            response = api.send_status_request()
+
+            assert response == REAL_DEVICE_XML_RESPONSE
+            assert "AA:BB:CC:DD:EE:FF" in response
+            assert "1234567890" in response
+            assert "PROFILECODE" in response
     
     def test_encryption_decryption_cycle(self, mock_post):
         """Test that encryption/decryption works with real-like data."""
         api = MitsubishiAPI("192.168.1.100")
         
         # Test that we can encrypt and decrypt a sample message
-        original_xml = "<TEST>sample data</TEST>"
+        original_xml = b"<TEST>sample data</TEST>"
         
         # Test actual encryption/decryption
         encrypted = api.encrypt_payload(original_xml)

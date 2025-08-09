@@ -96,7 +96,7 @@ Advanced capability detection using ProfileCode and group code analysis.
 ### Data Classes
 
 - `PowerOnOff`: Power state enumeration
-- `DriveMode`: Operating mode enumeration  
+- `DriveMode`: Operating mode enumeration
 - `WindSpeed`: Fan speed enumeration
 - `VerticalWindDirection`, `HorizontalWindDirection`: Vane direction enumerations
 

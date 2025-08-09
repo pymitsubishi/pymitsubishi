@@ -184,4 +184,3 @@ Each CODE value represents a segment of data transmitted between the device and 
 ### Conclusion
 
 This documentation outlines how each part of the payload is used or not used, providing insight into the detailed protocol handling of the air conditioning system.
-

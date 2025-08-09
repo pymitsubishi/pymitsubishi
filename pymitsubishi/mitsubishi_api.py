@@ -7,14 +7,15 @@ for Mitsubishi MAC-577IF-2E devices.
 """
 
 import base64
+import logging
 import re
-import requests
+from typing import Any
 import xml.etree.ElementTree as ET
+
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
+import requests
 from requests.auth import HTTPBasicAuth
-from typing import Optional, Dict, Any
-import logging
 
 # Constants from the working implementation
 KEY_SIZE = 16
@@ -25,19 +26,25 @@ logger = logging.getLogger(__name__)
 
 class MitsubishiAPI:
     """Handles all API communication with Mitsubishi AC devices"""
-    
-    def __init__(self, device_ip: str, encryption_key: str = STATIC_KEY, admin_username: str = "admin", admin_password: str = "me1debug@0567"):
+
+    def __init__(
+        self,
+        device_ip: str,
+        encryption_key: str = STATIC_KEY,
+        admin_username: str = "admin",
+        admin_password: str = "me1debug@0567",
+    ):
         self.device_ip = device_ip
         self.encryption_key = encryption_key
         self.admin_username = admin_username
         self.admin_password = admin_password
         self.session = requests.Session()
-        
-    def get_crypto_key(self):
+
+    def get_crypto_key(self) -> bytes:
         """Get the crypto key, same as TypeScript implementation"""
         buffer = bytearray(KEY_SIZE)
-        key_bytes = self.encryption_key.encode('utf-8')
-        buffer[:len(key_bytes)] = key_bytes
+        key_bytes = self.encryption_key.encode("utf-8")
+        buffer[: len(key_bytes)] = key_bytes
         return bytes(buffer)
 
     def encrypt_payload(self, payload: str) -> str:
@@ -45,73 +52,73 @@ class MitsubishiAPI:
         # Generate random IV
         iv = get_random_bytes(KEY_SIZE)
         key = self.get_crypto_key()
-        
+
         # Encrypt using AES CBC with zero padding
         cipher = AES.new(key, AES.MODE_CBC, iv)
-        
+
         # Zero pad the payload to multiple of 16 bytes
-        payload_bytes = payload.encode('utf-8')
+        payload_bytes = payload.encode("utf-8")
         padding_length = KEY_SIZE - (len(payload_bytes) % KEY_SIZE)
         if padding_length == KEY_SIZE:
             padding_length = 0
-        padded_payload = payload_bytes + b'\x00' * padding_length
-        
+        padded_payload = payload_bytes + b"\x00" * padding_length
+
         encrypted = cipher.encrypt(padded_payload)
-        
+
         # TypeScript approach: IV as hex + encrypted as hex, then base64 encode the combined hex
         iv_hex = iv.hex()
         encrypted_hex = encrypted.hex()
         combined_hex = iv_hex + encrypted_hex
         combined_bytes = bytes.fromhex(combined_hex)
-        return base64.b64encode(combined_bytes).decode('utf-8')
+        return base64.b64encode(combined_bytes).decode("utf-8")
 
-    def decrypt_payload(self, payload: str) -> Optional[str]:
+    def decrypt_payload(self, payload: str) -> str | None:
         """Decrypt payload following TypeScript implementation exactly"""
         try:
             # Convert base64 to hex string
             hex_buffer = base64.b64decode(payload).hex()
-            
+
             logger.debug(f"Base64 payload length: {len(payload)}")
             logger.debug(f"Hex buffer length: {len(hex_buffer)}")
-            
+
             # Extract IV from first 2 * KEY_SIZE hex characters
-            iv_hex = hex_buffer[:2 * KEY_SIZE]
+            iv_hex = hex_buffer[: 2 * KEY_SIZE]
             iv = bytes.fromhex(iv_hex)
-            
+
             logger.debug(f"IV: {iv.hex()}")
-            
+
             key = self.get_crypto_key()
-            
+
             # Extract the encrypted portion
-            encrypted_hex = hex_buffer[2 * KEY_SIZE:]
+            encrypted_hex = hex_buffer[2 * KEY_SIZE :]
             encrypted_data = bytes.fromhex(encrypted_hex)
-            
+
             logger.debug(f"Encrypted data length: {len(encrypted_data)}")
             logger.debug(f"Encrypted data (first 64 bytes): {encrypted_data[:64].hex()}")
-            
+
             cipher = AES.new(key, AES.MODE_CBC, iv)
             decrypted = cipher.decrypt(encrypted_data)
-            
+
             logger.debug(f"Decrypted raw length: {len(decrypted)}")
             logger.debug(f"Decrypted raw (first 64 bytes): {decrypted[:64]}")
             logger.debug(f"Decrypted raw (last 64 bytes): {decrypted[-64:]}")
-            
+
             # Remove zero padding
-            decrypted_clean = decrypted.rstrip(b'\x00')
-            
+            decrypted_clean = decrypted.rstrip(b"\x00")
+
             logger.debug(f"After padding removal length: {len(decrypted_clean)}")
             logger.debug(f"Non-zero bytes at end: {decrypted_clean[-20:]}")
-            
+
             # Try to decode as UTF-8
             try:
-                result = decrypted_clean.decode('utf-8')
+                result = decrypted_clean.decode("utf-8")
                 return result
             except UnicodeDecodeError as ude:
                 logger.debug(f"UTF-8 decode error at position {ude.start}: {ude.reason}")
-                logger.debug(f"Problematic bytes: {decrypted_clean[max(0, ude.start-10):ude.start+10]}")
-                
+                logger.debug(f"Problematic bytes: {decrypted_clean[max(0, ude.start - 10) : ude.start + 10]}")
+
                 # Try to find the actual end of the XML by looking for closing tags
-                xml_end_patterns = [b'</LSV>', b'</CSV>', b'</ESV>']
+                xml_end_patterns = [b"</LSV>", b"</CSV>", b"</ESV>"]
                 for pattern in xml_end_patterns:
                     pos = decrypted_clean.find(pattern)
                     if pos != -1:
@@ -120,45 +127,45 @@ class MitsubishiAPI:
                         logger.debug(f"Found XML end pattern {pattern} at position {pos}")
                         logger.debug(f"Truncated length: {len(truncated)}")
                         try:
-                            return truncated.decode('utf-8')
+                            return truncated.decode("utf-8")
                         except UnicodeDecodeError:
                             continue
-                
+
                 # If no valid XML end found, try errors='ignore'
-                result = decrypted_clean.decode('utf-8', errors='ignore')
+                result = decrypted_clean.decode("utf-8", errors="ignore")
                 logger.debug(f"Using errors='ignore', result length: {len(result)}")
                 return result
-                
+
         except Exception as e:
             logger.error(f"Decryption error: {e}")
             return None
 
-    def make_request(self, payload_xml: str) -> Optional[str]:
+    def make_request(self, payload_xml: str) -> str | None:
         """Make HTTP request to the /smart endpoint"""
         # Encrypt the XML payload
         encrypted_payload = self.encrypt_payload(payload_xml)
-        
+
         # Create the full XML request body
         request_body = f'<?xml version="1.0" encoding="UTF-8"?><ESV>{encrypted_payload}</ESV>'
-        
+
         logger.debug("Request Body:")
         logger.debug(request_body)
 
         headers = {
-            'Host': f'{self.device_ip}:80',
-            'Content-Type': 'text/plain;chrset=UTF-8',
-            'Connection': 'keep-alive',
-            'Proxy-Connection': 'keep-alive',
-            'Accept': '*/*',
-            'User-Agent': 'KirigamineRemote/5.1.0 (jp.co.MitsubishiElectric.KirigamineRemote; build:3; iOS 17.5.1) Alamofire/5.9.1',
-            'Accept-Language': 'zh-Hant-JP;q=1.0, ja-JP;q=0.9',
+            "Host": f"{self.device_ip}:80",
+            "Content-Type": "text/plain;chrset=UTF-8",
+            "Connection": "keep-alive",
+            "Proxy-Connection": "keep-alive",
+            "Accept": "*/*",
+            "User-Agent": "KirigamineRemote/5.1.0 (jp.co.MitsubishiElectric.KirigamineRemote; build:3; iOS 17.5.1) Alamofire/5.9.1",
+            "Accept-Language": "zh-Hant-JP;q=1.0, ja-JP;q=0.9",
         }
-        
-        url = f'http://{self.device_ip}/smart'
-        
+
+        url = f"http://{self.device_ip}/smart"
+
         try:
             response = self.session.post(url, data=request_body, headers=headers, timeout=10)
-            
+
             if response.status_code == 200:
                 logger.debug("Response Text:")
                 logger.debug(response.text)
@@ -170,161 +177,170 @@ class MitsubishiAPI:
                         return decrypted
                 except ET.ParseError as e:
                     logger.error(f"XML parsing error: {e}")
-            
+
             return None
-            
+
         except requests.exceptions.RequestException as e:
             logger.error(f"Request error: {e}")
             return None
 
-
-    def send_status_request(self) -> Optional[str]:
+    def send_status_request(self) -> str | None:
         """Send a status request to get current device state"""
-        payload_xml = '<CSV><CONNECT>ON</CONNECT></CSV>'
+        payload_xml = "<CSV><CONNECT>ON</CONNECT></CSV>"
         return self.make_request(payload_xml)
 
-    def send_echonet_enable(self) -> Optional[str]:
+    def send_echonet_enable(self) -> str | None:
         """Send ECHONET enable command"""
-        payload_xml = '<CSV><CONNECT>ON</CONNECT><ECHONET>ON</ECHONET></CSV>'
+        payload_xml = "<CSV><CONNECT>ON</CONNECT><ECHONET>ON</ECHONET></CSV>"
         return self.make_request(payload_xml)
 
-    def send_hex_command(self, hex_command: str) -> Optional[str]:
+    def send_hex_command(self, hex_command: str) -> str | None:
         """Send a hex command to the device"""
-        payload_xml = f'<CSV><CONNECT>ON</CONNECT><CODE><VALUE>{hex_command}</VALUE></CODE></CSV>'
+        payload_xml = f"<CSV><CONNECT>ON</CONNECT><CODE><VALUE>{hex_command}</VALUE></CODE></CSV>"
         return self.make_request(payload_xml)
 
-    def get_unit_info(self, admin_password: str = None) -> Optional[Dict[str, Any]]:
+    def get_unit_info(self, admin_password: str = None) -> dict[str, Any] | None:
         """Get unit information from the /unitinfo endpoint using admin credentials"""
         try:
-            url = f'http://{self.device_ip}/unitinfo'
+            url = f"http://{self.device_ip}/unitinfo"
             # Use provided password or fall back to instance default
             password = admin_password or self.admin_password
             auth = HTTPBasicAuth(self.admin_username, password)
-            
+
             logger.debug(f"Fetching unit info from {url}")
-            
+
             response = self.session.get(url, auth=auth, timeout=10)
-            
+
             if response.status_code == 200:
                 logger.debug(f"Unit info HTML response received ({len(response.text)} chars)")
-                
+
                 # Parse the HTML response to extract unit information
                 return self._parse_unit_info_html(response.text)
             else:
                 logger.debug(f"Unit info request failed with status {response.status_code}")
                 return None
-                
+
         except requests.exceptions.RequestException as e:
             logger.debug(f"Unit info request error: {e}")
             return None
-    
-    def _parse_unit_info_html(self, html_content: str) -> Dict[str, Any]:
+
+    def _parse_unit_info_html(self, html_content: str) -> dict[str, Any]:
         """Parse unit info HTML response to extract structured data"""
-        unit_info = {
-            'adaptor_info': {},
-            'unit_info': {}
-        }
-        
+        unit_info = {"adaptor_info": {}, "unit_info": {}}
+
         try:
             # Extract data using regex patterns to parse the HTML structure
             # Pattern to match <dt>Label</dt><dd>Value</dd> pairs
-            pattern = r'<dt>([^<]+)</dt>\s*<dd>([^<]+)</dd>'
+            pattern = r"<dt>([^<]+)</dt>\s*<dd>([^<]+)</dd>"
             matches = re.findall(pattern, html_content)
-            
+
             logger.debug(f"Found {len(matches)} key-value pairs in HTML")
-            
+
             # Determine which section we're in based on the order and known fields
             adaptor_fields = {
-                'Adaptor name', 'Application version', 'Release version', 'Flash version',
-                'Boot version', 'Common platform version', 'Test release version',
-                'MAC address', 'ID', 'Manufacturing date', 'Current time', 'Channel',
-                'RSSI', 'IT communication status', 'Server operation', 
-                'Server communication status', 'Server communication status(HEMS)',
-                'SOI communication status', 'Thermal image timestamp'
+                "Adaptor name",
+                "Application version",
+                "Release version",
+                "Flash version",
+                "Boot version",
+                "Common platform version",
+                "Test release version",
+                "MAC address",
+                "ID",
+                "Manufacturing date",
+                "Current time",
+                "Channel",
+                "RSSI",
+                "IT communication status",
+                "Server operation",
+                "Server communication status",
+                "Server communication status(HEMS)",
+                "SOI communication status",
+                "Thermal image timestamp",
             }
-            
-            unit_fields = {
-                'Unit type', 'IT protocol version', 'Error'
-            }
-            
+
+            unit_fields = {"Unit type", "IT protocol version", "Error"}
+
             for key, value in matches:
                 key = key.strip()
                 value = value.strip()
-                
+
                 if key in adaptor_fields:
                     # Convert specific fields to appropriate types
-                    if key == 'RSSI':
+                    if key == "RSSI":
                         # Extract numeric value from "-25dBm" format
-                        rssi_match = re.search(r'(-?\d+)', value)
+                        rssi_match = re.search(r"(-?\d+)", value)
                         if rssi_match:
-                            unit_info['adaptor_info']['rssi_dbm'] = int(rssi_match.group(1))
-                        unit_info['adaptor_info']['rssi_raw'] = value
-                    elif key == 'Channel':
+                            unit_info["adaptor_info"]["rssi_dbm"] = int(rssi_match.group(1))
+                        unit_info["adaptor_info"]["rssi_raw"] = value
+                    elif key == "Channel":
                         try:
-                            unit_info['adaptor_info']['wifi_channel'] = int(value)
+                            unit_info["adaptor_info"]["wifi_channel"] = int(value)
                         except ValueError:
-                            unit_info['adaptor_info']['wifi_channel_raw'] = value
-                    elif key == 'ID':
+                            unit_info["adaptor_info"]["wifi_channel_raw"] = value
+                    elif key == "ID":
                         try:
-                            unit_info['adaptor_info']['device_id'] = int(value)
+                            unit_info["adaptor_info"]["device_id"] = int(value)
                         except ValueError:
-                            unit_info['adaptor_info']['device_id_raw'] = value
-                    elif key == 'MAC address':
-                        unit_info['adaptor_info']['mac_address'] = value
-                    elif key == 'Manufacturing date':
-                        unit_info['adaptor_info']['manufacturing_date'] = value
-                    elif key == 'Current time':
-                        unit_info['adaptor_info']['current_time'] = value
-                    elif key == 'Adaptor name':
-                        unit_info['adaptor_info']['model'] = value
-                    elif key == 'Application version':
-                        unit_info['adaptor_info']['app_version'] = value
-                    elif key == 'Release version':
-                        unit_info['adaptor_info']['release_version'] = value
-                    elif key == 'Flash version':
-                        unit_info['adaptor_info']['flash_version'] = value
-                    elif key == 'Boot version':
-                        unit_info['adaptor_info']['boot_version'] = value
-                    elif key == 'Common platform version':
-                        unit_info['adaptor_info']['platform_version'] = value
-                    elif key == 'Test release version':
-                        unit_info['adaptor_info']['test_version'] = value
-                    elif key == 'IT communication status':
-                        unit_info['adaptor_info']['it_comm_status'] = value
-                    elif key == 'Server operation':
-                        unit_info['adaptor_info']['server_operation'] = value == 'ON'
-                    elif key == 'Server communication status':
-                        unit_info['adaptor_info']['server_comm_status'] = value
-                    elif key == 'Server communication status(HEMS)':
-                        unit_info['adaptor_info']['hems_comm_status'] = value
-                    elif key == 'SOI communication status':
-                        unit_info['adaptor_info']['soi_comm_status'] = value
-                    elif key == 'Thermal image timestamp':
-                        unit_info['adaptor_info']['thermal_timestamp'] = value if value != '--' else None
+                            unit_info["adaptor_info"]["device_id_raw"] = value
+                    elif key == "MAC address":
+                        unit_info["adaptor_info"]["mac_address"] = value
+                    elif key == "Manufacturing date":
+                        unit_info["adaptor_info"]["manufacturing_date"] = value
+                    elif key == "Current time":
+                        unit_info["adaptor_info"]["current_time"] = value
+                    elif key == "Adaptor name":
+                        unit_info["adaptor_info"]["model"] = value
+                    elif key == "Application version":
+                        unit_info["adaptor_info"]["app_version"] = value
+                    elif key == "Release version":
+                        unit_info["adaptor_info"]["release_version"] = value
+                    elif key == "Flash version":
+                        unit_info["adaptor_info"]["flash_version"] = value
+                    elif key == "Boot version":
+                        unit_info["adaptor_info"]["boot_version"] = value
+                    elif key == "Common platform version":
+                        unit_info["adaptor_info"]["platform_version"] = value
+                    elif key == "Test release version":
+                        unit_info["adaptor_info"]["test_version"] = value
+                    elif key == "IT communication status":
+                        unit_info["adaptor_info"]["it_comm_status"] = value
+                    elif key == "Server operation":
+                        unit_info["adaptor_info"]["server_operation"] = value == "ON"
+                    elif key == "Server communication status":
+                        unit_info["adaptor_info"]["server_comm_status"] = value
+                    elif key == "Server communication status(HEMS)":
+                        unit_info["adaptor_info"]["hems_comm_status"] = value
+                    elif key == "SOI communication status":
+                        unit_info["adaptor_info"]["soi_comm_status"] = value
+                    elif key == "Thermal image timestamp":
+                        unit_info["adaptor_info"]["thermal_timestamp"] = value if value != "--" else None
                     else:
                         # Fallback: store with normalized key
-                        normalized_key = key.lower().replace(' ', '_').replace('(', '').replace(')', '')
-                        unit_info['adaptor_info'][normalized_key] = value
-                        
+                        normalized_key = key.lower().replace(" ", "_").replace("(", "").replace(")", "")
+                        unit_info["adaptor_info"][normalized_key] = value
+
                 elif key in unit_fields:
-                    if key == 'Unit type':
-                        unit_info['unit_info']['type'] = value
-                    elif key == 'IT protocol version':
-                        unit_info['unit_info']['it_protocol_version'] = value
-                    elif key == 'Error':
-                        unit_info['unit_info']['error_code'] = value
+                    if key == "Unit type":
+                        unit_info["unit_info"]["type"] = value
+                    elif key == "IT protocol version":
+                        unit_info["unit_info"]["it_protocol_version"] = value
+                    elif key == "Error":
+                        unit_info["unit_info"]["error_code"] = value
                     else:
                         # Fallback: store with normalized key
-                        normalized_key = key.lower().replace(' ', '_')
-                        unit_info['unit_info'][normalized_key] = value
-            
-            logger.debug(f"Parsed unit info: {len(unit_info['adaptor_info'])} adaptor fields, {len(unit_info['unit_info'])} unit fields")
-            
+                        normalized_key = key.lower().replace(" ", "_")
+                        unit_info["unit_info"][normalized_key] = value
+
+            logger.debug(
+                f"Parsed unit info: {len(unit_info['adaptor_info'])} adaptor fields, {len(unit_info['unit_info'])} unit fields"
+            )
+
             return unit_info
-            
+
         except Exception as e:
             logger.debug(f"Error parsing unit info HTML: {e}")
-            return {'adaptor_info': {}, 'unit_info': {}, 'parse_error': str(e)}
+            return {"adaptor_info": {}, "unit_info": {}, "parse_error": str(e)}
 
     def close(self):
         """Close the session"""

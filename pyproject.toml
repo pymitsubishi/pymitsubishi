@@ -1,0 +1,170 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pymitsubishi"
+version = "0.1.8"
+description = "Control and monitor Mitsubishi Air Conditioners"
+readme = "README.md"
+authors = [
+    {name = "Ashleigh Hopkins", email = "ashleigh@example.com"}
+]
+maintainers = [
+    {name = "Ashleigh Hopkins", email = "ashleigh@example.com"}
+]
+license = {text = "MIT"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Home Automation",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+keywords = ["mitsubishi", "aircon", "air conditioner", "home automation", "MAC-577IF-E"]
+requires-python = ">=3.12"
+dependencies = [
+    "requests",
+    "pycryptodome",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.21.0",
+    "mypy>=1.5.0",
+    "ruff>=0.1.0",
+    "pre-commit>=3.4.0",
+    "build>=1.0.0",
+    "twine>=4.0.0",
+    "types-requests",
+]
+
+[project.urls]
+Homepage = "https://github.com/pymitsubishi/pymitsubishi"
+Documentation = "https://github.com/pymitsubishi/pymitsubishi#readme"
+Repository = "https://github.com/pymitsubishi/pymitsubishi.git"
+Issues = "https://github.com/pymitsubishi/pymitsubishi/issues"
+
+[tool.setuptools.packages.find]
+include = ["pymitsubishi*"]
+exclude = ["tests*", "docs*"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify (selected Home Assistant rules)
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "E741",  # ambiguous variable name
+    "B008",  # do not perform function calls in argument defaults
+    "B904",  # raise-without-from-inside-except
+    "C901",  # too complex
+    "SIM105", # Use contextlib.suppress(...) - sometimes explicit is better
+    "SIM114", # Combine if branches using logical or - can hurt readability
+    "SIM117", # merge with-statements - can hurt readability
+    "UP007",  # Use X | Y for Union types - not always more readable
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "S101",  # asserts are fine in tests
+    "SIM",   # don't need simplifications in tests
+    "B011",  # don't warn about assert False in tests
+]
+"setup.py" = ["ALL"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pymitsubishi"]
+combine-as-imports = true
+force-sort-within-sections = true
+
+[tool.mypy]
+python_version = "3.12"
+check_untyped_defs = true
+warn_return_any = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+strict_equality = true
+# Allow some flexibility for practical development
+disallow_untyped_defs = false
+disallow_any_generics = false
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "Crypto.*"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--cov=pymitsubishi",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-report=xml",
+    # Relaxed coverage requirement - aim high but don't block
+]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "slow: Tests that take a long time to run",
+]
+
+[tool.coverage.run]
+source = ["pymitsubishi"]
+omit = [
+    "*/tests/*",
+    "*/__init__.py",
+    "*/setup.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if __name__ == .__main__.:",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+    "except ImportError:",
+]
+precision = 2
+# No hard failure on coverage - just report it
+skip_covered = false
+skip_empty = true
+
+[tool.isort]
+profile = "black"
+line_length = 120
+force_single_line = false
+combine_as_imports = true
+order_by_type = true
+include_trailing_comma = true
+use_parentheses = true
+multi_line_output = 3

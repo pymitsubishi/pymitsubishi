@@ -1,0 +1,33 @@
+# Development dependencies for pymitsubishi
+# Install with: pip install -r requirements-dev.txt
+# Or install the package with dev extras: pip install -e ".[dev]"
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-asyncio>=0.21.0
+
+# Type checking
+mypy>=1.5.0
+types-requests
+
+# Linting and formatting
+ruff>=0.1.0
+
+# Pre-commit hooks
+pre-commit>=3.4.0
+
+# Security scanning
+bandit[toml]>=1.7.5
+
+# Additional quality checks
+pylint>=3.0.0
+pyupgrade>=3.15.0
+
+# Build and publish
+build>=1.0.0
+twine>=4.0.0
+
+# Core dependencies (for development)
+requests
+pycryptodome

@@ -7,6 +7,7 @@ def test_package_imports():
     """Test that the main package components can be imported."""
     try:
         from pymitsubishi import MitsubishiAPI, MitsubishiController
+
         assert MitsubishiAPI is not None
         assert MitsubishiController is not None
     except ImportError as e:
@@ -17,9 +18,13 @@ def test_enums_import():
     """Test that enums can be imported."""
     try:
         from pymitsubishi.mitsubishi_parser import (
-            PowerOnOff, DriveMode, WindSpeed, 
-            VerticalWindDirection, HorizontalWindDirection
+            DriveMode,
+            HorizontalWindDirection,
+            PowerOnOff,
+            VerticalWindDirection,
+            WindSpeed,
         )
+
         assert PowerOnOff is not None
         assert DriveMode is not None
         assert WindSpeed is not None
@@ -32,7 +37,7 @@ def test_enums_import():
 def test_api_initialization():
     """Test that API can be initialized without connection."""
     from pymitsubishi import MitsubishiAPI
-    
+
     api = MitsubishiAPI("192.168.1.100")  # Dummy IP
     assert api.device_ip == "192.168.1.100"
 
@@ -40,7 +45,7 @@ def test_api_initialization():
 def test_controller_initialization():
     """Test that controller can be initialized."""
     from pymitsubishi import MitsubishiAPI, MitsubishiController
-    
+
     api = MitsubishiAPI("192.168.1.100")  # Dummy IP
     controller = MitsubishiController(api)
     assert controller.api.device_ip == "192.168.1.100"

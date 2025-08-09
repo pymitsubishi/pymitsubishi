@@ -71,3 +71,8 @@ docs/_build/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# Coverage files
+.coverage
+coverage.xml
+htmlcov/

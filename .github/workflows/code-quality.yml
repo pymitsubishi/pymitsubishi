@@ -1,0 +1,91 @@
+name: Code Quality
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  pre-commit:
+    name: Pre-commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: pre-commit/action@v3.0.0
+
+  ruff:
+    name: Ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Ruff
+        run: pip install ruff
+      - name: Run Ruff
+        run: |
+          ruff check pymitsubishi tests
+          ruff format --check pymitsubishi tests
+
+  mypy:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install mypy types-requests
+          pip install -e .
+      - name: Run mypy
+        run: mypy pymitsubishi --ignore-missing-imports || true
+
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          pip install pytest pytest-cov
+          pip install -e .
+      - name: Run tests
+        run: pytest tests/ -v --cov=pymitsubishi --cov-report=term-missing
+
+
+  check-version-sync:
+    name: Version Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check version consistency
+        run: |
+          # Extract versions from files
+          PYPROJECT_VERSION=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          SETUP_VERSION=$(grep 'VERSION = ' setup.py | sed 's/.*VERSION = "\(.*\)".*/\1/')
+          INIT_VERSION=$(grep '__version__ = ' pymitsubishi/__init__.py | sed 's/__version__ = "\(.*\)"/\1/')
+
+          echo "pyproject.toml: $PYPROJECT_VERSION"
+          echo "setup.py: $SETUP_VERSION"
+          echo "__init__.py: $INIT_VERSION"
+
+          # Check if all versions match
+          if [ "$PYPROJECT_VERSION" != "$SETUP_VERSION" ] || [ "$SETUP_VERSION" != "$INIT_VERSION" ]; then
+            echo "Version mismatch detected!"
+            exit 1
+          fi
+          echo "All versions match: $PYPROJECT_VERSION"

@@ -9,12 +9,7 @@ REAL_DEVICE_XML_RESPONSE = """<LSV><MAC>AA:BB:CC:DD:EE:FF</MAC><SERIAL>123456789
 
 # Expected parsed device state from the above XML
 EXPECTED_DEVICE_STATE = {
-    "device_info": {
-        "mac": "AA:BB:CC:DD:EE:FF",
-        "serial": "1234567890",
-        "rssi": "",
-        "app_version": ""
-    },
+    "device_info": {"mac": "AA:BB:CC:DD:EE:FF", "serial": "1234567890", "rssi": "", "app_version": ""},
     "general_states": {
         "power": "ON",
         "mode": "COOLER",
@@ -25,18 +20,15 @@ EXPECTED_DEVICE_STATE = {
         "horizontal_wind_direction": "R",
         "dehumidification_setting": 70,
         "power_saving_mode": False,
-        "wind_and_wind_break_direct": 0
+        "wind_and_wind_break_direct": 0,
     },
     "sensor_states": {
         "room_temperature_celsius": 22.0,
         "outside_temperature_celsius": 20.0,
         "thermal_sensor_active": False,
-        "wind_speed_pr557": 0
+        "wind_speed_pr557": 0,
     },
-    "error_states": {
-        "abnormal_state": False,
-        "error_code": "8000"
-    }
+    "error_states": {"abnormal_state": False, "error_code": "8000"},
 }
 
 # Sample encrypted ESV request/response for API tests
@@ -47,14 +39,14 @@ SAMPLE_ESV_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?><ESV>98M+S/NAN/Hb
 # Profile codes found in real device responses
 SAMPLE_PROFILE_CODES = [
     "0300200714070000000000000000000000000000000000000000000000000000",  # First profile with capability flags
-    "a0bea0bea0bea0bea0bea0bea0bea0bea0bea0bea0bea0bea0bea0bea0bea0be",    # Second profile with repeated pattern
-    "0000000000000000000000000000000000000000000000000000000000000000",   # Empty profile codes
+    "a0bea0bea0bea0bea0bea0bea0bea0bea0bea0bea0bea0bea0bea0bea0bea0be",  # Second profile with repeated pattern
+    "0000000000000000000000000000000000000000000000000000000000000000",  # Empty profile codes
 ]
 
 # Sample hex code values for parser testing
 SAMPLE_CODE_VALUES = [
     "ffffffffffffffffffff0202008000",  # Group code 02
-    "ffffffffffffffffffff0302008000",  # Group code 03  
+    "ffffffffffffffffffff0302008000",  # Group code 03
     "ffffffffffffffffffff0402008000",  # Group code 04
     "ffffffffffffffffffff0502008000",  # Group code 05
     "ffffffffffffffffffff0602008000",  # Group code 06
@@ -98,7 +90,7 @@ MODE_TEST_CASES = [
 # Device status summary expected format
 EXPECTED_STATUS_SUMMARY = {
     "mac": "AA:BB:CC:DD:EE:FF",
-    "serial": "1234567890", 
+    "serial": "1234567890",
     "power": "ON",
     "mode": "COOLER",
     "target_temp": 22.5,
@@ -108,16 +100,11 @@ EXPECTED_STATUS_SUMMARY = {
     "room_temp": 22.0,
     "outside_temp": 20.0,
     "error_code": "8000",
-    "abnormal_state": False
+    "abnormal_state": False,
 }
 
 # LED status patterns from real device
-LED_PATTERNS = {
-    "LED1": "1:30,0:30",
-    "LED2": "1:30,0:30", 
-    "LED3": "1:30,0:30",
-    "LED4": "1:5,0:45"
-}
+LED_PATTERNS = {"LED1": "1:30,0:30", "LED2": "1:30,0:30", "LED3": "1:30,0:30", "LED4": "1:5,0:45"}
 
 # Error scenarios for testing
 ERROR_TEST_CASES = [

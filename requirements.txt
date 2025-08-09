@@ -1,0 +1,5 @@
+# Runtime dependencies for pymitsubishi
+# These are the minimal requirements to run the library
+
+requests
+pycryptodome

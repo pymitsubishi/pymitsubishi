@@ -7,6 +7,10 @@
 
 A Python library for controlling and monitoring Mitsubishi MAC-577IF-2E air conditioners.
 
+## Home Assistant Integration
+
+For Home Assistant users, check out our official integration: [homeassistant-mitsubishi](https://github.com/pymitsubishi/homeassistant-mitsubishi)
+
 ## Features
 
 - **Device Control**: Power, temperature, mode, fan speed, and vane direction control
@@ -112,4 +116,4 @@ MIT License - see LICENSE file for details.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please see our [Contributing Guidelines](CONTRIBUTING.md) for detailed information on development setup, code standards, and the contribution process.

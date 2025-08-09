@@ -24,7 +24,7 @@ class PowerOnOff(Enum):
 
 
 class DriveMode(Enum):
-    AUTO = 0
+    AUTO = 8  # Fixed: Changed from 0 to 8 based on actual device behavior
     HEATER = 1
     DEHUM = 2
     COOLER = 3
@@ -267,7 +267,7 @@ def parse_mode_with_i_see(mode_byte: int) -> tuple[DriveMode, bool, int]:
 
     Based on niobos fork and SwiCago implementation:
     - Bits 0-2 (0x07): Drive mode
-    - Bit 3 (0x08): i-See sensor flag
+    - Bit 3 (0x08): i-See sensor flag OR part of mode value for AUTO
     - Bits 4-7 (0xF0): Unknown/reserved
 
     Args:
@@ -276,10 +276,14 @@ def parse_mode_with_i_see(mode_byte: int) -> tuple[DriveMode, bool, int]:
     Returns:
         tuple of (drive_mode, i_see_active, raw_mode_value)
     """
-    # Extract drive mode from lower 3 bits
+    # Special case: AUTO mode uses value 8 (0x08)
+    if mode_byte == 0x08:
+        return DriveMode.AUTO, False, mode_byte
+
+    # Extract drive mode from lower 3 bits for other modes
     actual_mode_value = mode_byte & 0x07
 
-    # Check if i-See sensor flag is set (bit 3)
+    # Check if i-See sensor flag is set (bit 3) for non-AUTO modes
     i_see_active = bool(mode_byte & 0x08)
 
     # Get the drive mode enum

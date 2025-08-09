@@ -14,12 +14,14 @@ import xml.etree.ElementTree as ET
 
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
+from Crypto.Util.Padding import pad, unpad
 import requests
+from requests.adapters import HTTPAdapter, Retry
 from requests.auth import HTTPBasicAuth
 
 # Constants from the working implementation
 KEY_SIZE = 16
-STATIC_KEY = "unregistered"
+STATIC_KEY = b"unregistered\0\0\0\0"  # Use bytes directly with proper padding
 
 logger = logging.getLogger(__name__)
 
@@ -30,84 +32,78 @@ class MitsubishiAPI:
     def __init__(
         self,
         device_ip: str,
-        encryption_key: str = STATIC_KEY,
+        port: int = 80,
+        encryption_key: bytes | str = STATIC_KEY,
         admin_username: str = "admin",
         admin_password: str = "me1debug@0567",
     ):
         self.device_ip = device_ip
-        self.encryption_key = encryption_key
+        self.port = port
+        # Handle both bytes and string encryption keys
+        if isinstance(encryption_key, str):
+            encryption_key = encryption_key.encode("utf-8")
+        # Ensure key is exactly KEY_SIZE bytes
+        if len(encryption_key) < KEY_SIZE:
+            encryption_key += (KEY_SIZE - len(encryption_key)) * b"\0"  # pad with NULL-bytes
+        self.encryption_key = encryption_key[:KEY_SIZE]  # trim if too long
         self.admin_username = admin_username
         self.admin_password = admin_password
         self.session = requests.Session()
 
+        # Add retry logic with backoff for better reliability
+        retries = Retry(total=2, backoff_factor=1)
+        self.session.mount("http://", HTTPAdapter(max_retries=retries))
+
     def get_crypto_key(self) -> bytes:
-        """Get the crypto key, same as TypeScript implementation"""
-        buffer = bytearray(KEY_SIZE)
-        key_bytes = self.encryption_key.encode("utf-8")
-        buffer[: len(key_bytes)] = key_bytes
-        return bytes(buffer)
+        """Get the crypto key - now just returns the properly sized key"""
+        return self.encryption_key
 
-    def encrypt_payload(self, payload: str) -> str:
-        """Encrypt payload using same method as TypeScript implementation"""
-        # Generate random IV
-        iv = get_random_bytes(KEY_SIZE)
-        key = self.get_crypto_key()
+    def encrypt_payload(self, payload: str, iv: bytes | None = None) -> str:
+        """Encrypt payload using AES-CBC with proper padding"""
+        if iv is None:  # Allow passing in IV for testing purposes
+            iv = get_random_bytes(KEY_SIZE)
 
-        # Encrypt using AES CBC with zero padding
-        cipher = AES.new(key, AES.MODE_CBC, iv)
+        # Encrypt using AES CBC with ISO 7816-4 padding
+        cipher = AES.new(self.encryption_key, AES.MODE_CBC, iv)
 
-        # Zero pad the payload to multiple of 16 bytes
         payload_bytes = payload.encode("utf-8")
-        padding_length = KEY_SIZE - (len(payload_bytes) % KEY_SIZE)
-        if padding_length == KEY_SIZE:
-            padding_length = 0
-        padded_payload = payload_bytes + b"\x00" * padding_length
+        padded_payload = pad(payload_bytes, KEY_SIZE, "iso7816")
 
         encrypted = cipher.encrypt(padded_payload)
 
-        # TypeScript approach: IV as hex + encrypted as hex, then base64 encode the combined hex
-        iv_hex = iv.hex()
-        encrypted_hex = encrypted.hex()
-        combined_hex = iv_hex + encrypted_hex
-        combined_bytes = bytes.fromhex(combined_hex)
-        return base64.b64encode(combined_bytes).decode("utf-8")
+        # Combine IV and encrypted data, then base64 encode
+        return base64.b64encode(iv + encrypted).decode("utf-8")
 
-    def decrypt_payload(self, payload: str) -> str | None:
-        """Decrypt payload following TypeScript implementation exactly"""
+    def decrypt_payload(self, payload_b64: str) -> str | None:
+        """Decrypt payload using direct byte manipulation"""
         try:
-            # Convert base64 to hex string
-            hex_buffer = base64.b64decode(payload).hex()
+            # Convert base64 directly to bytes
+            encrypted = base64.b64decode(payload_b64)
 
-            logger.debug(f"Base64 payload length: {len(payload)}")
-            logger.debug(f"Hex buffer length: {len(hex_buffer)}")
+            logger.debug(f"Base64 payload length: {len(payload_b64)}")
 
-            # Extract IV from first 2 * KEY_SIZE hex characters
-            iv_hex = hex_buffer[: 2 * KEY_SIZE]
-            iv = bytes.fromhex(iv_hex)
+            # Extract IV and encrypted data
+            iv = encrypted[:KEY_SIZE]
+            encrypted_data = encrypted[KEY_SIZE:]
 
             logger.debug(f"IV: {iv.hex()}")
-
-            key = self.get_crypto_key()
-
-            # Extract the encrypted portion
-            encrypted_hex = hex_buffer[2 * KEY_SIZE :]
-            encrypted_data = bytes.fromhex(encrypted_hex)
-
             logger.debug(f"Encrypted data length: {len(encrypted_data)}")
-            logger.debug(f"Encrypted data (first 64 bytes): {encrypted_data[:64].hex()}")
 
-            cipher = AES.new(key, AES.MODE_CBC, iv)
+            # Decrypt using AES CBC
+            cipher = AES.new(self.encryption_key, AES.MODE_CBC, iv)
             decrypted = cipher.decrypt(encrypted_data)
 
             logger.debug(f"Decrypted raw length: {len(decrypted)}")
-            logger.debug(f"Decrypted raw (first 64 bytes): {decrypted[:64].hex()}")
-            logger.debug(f"Decrypted raw (last 64 bytes): {decrypted[-64:].hex()}")
 
-            # Remove zero padding
-            decrypted_clean = decrypted.rstrip(b"\x00")
+            # Try to remove ISO 7816-4 padding first
+            try:
+                decrypted_clean = unpad(decrypted, KEY_SIZE, "iso7816")
+            except ValueError:
+                # Fall back to removing zero padding if ISO padding fails
+                decrypted_clean = decrypted.rstrip(b"\x00")
+                logger.debug("ISO 7816-4 unpadding failed, using zero padding removal")
 
             logger.debug(f"After padding removal length: {len(decrypted_clean)}")
-            logger.debug(f"Non-zero bytes at end: {decrypted_clean[-20:].hex()}")
 
             # Try to decode as UTF-8
             try:
@@ -115,7 +111,6 @@ class MitsubishiAPI:
                 return result
             except UnicodeDecodeError as ude:
                 logger.debug(f"UTF-8 decode error at position {ude.start}: {ude.reason}")
-                logger.debug(f"Problematic bytes: {decrypted_clean[max(0, ude.start - 10) : ude.start + 10].hex()}")
 
                 # Try to find the actual end of the XML by looking for closing tags
                 xml_end_patterns = [b"</LSV>", b"</CSV>", b"</ESV>"]
@@ -125,17 +120,16 @@ class MitsubishiAPI:
                         end_pos = pos + len(pattern)
                         truncated = decrypted_clean[:end_pos]
                         logger.debug(f"Found XML end pattern {pattern.decode('utf-8')} at position {pos}")
-                        logger.debug(f"Truncated length: {len(truncated)}")
                         try:
-                            result_str: str = truncated.decode("utf-8")
-                            return result_str
+                            truncated_result: str = truncated.decode("utf-8")
+                            return truncated_result
                         except UnicodeDecodeError:
                             continue
 
                 # If no valid XML end found, try errors='ignore'
-                result_fallback: str = decrypted_clean.decode("utf-8", errors="ignore")
-                logger.debug(f"Using errors='ignore', result length: {len(result_fallback)}")
-                return result_fallback
+                fallback_result: str = decrypted_clean.decode("utf-8", errors="ignore")
+                logger.debug(f"Using errors='ignore', result length: {len(fallback_result)}")
+                return fallback_result
 
         except Exception as e:
             logger.error(f"Decryption error: {e}")
@@ -153,7 +147,7 @@ class MitsubishiAPI:
         logger.debug(request_body)
 
         headers = {
-            "Host": f"{self.device_ip}:80",
+            "Host": f"{self.device_ip}:{self.port}",
             "Content-Type": "text/plain;chrset=UTF-8",
             "Connection": "keep-alive",
             "Proxy-Connection": "keep-alive",
@@ -162,10 +156,10 @@ class MitsubishiAPI:
             "Accept-Language": "zh-Hant-JP;q=1.0, ja-JP;q=0.9",
         }
 
-        url = f"http://{self.device_ip}/smart"
+        url = f"http://{self.device_ip}:{self.port}/smart"
 
         try:
-            response = self.session.post(url, data=request_body, headers=headers, timeout=10)
+            response = self.session.post(url, data=request_body, headers=headers, timeout=2)
 
             if response.status_code == 200:
                 logger.debug("Response Text:")
@@ -203,14 +197,14 @@ class MitsubishiAPI:
     def get_unit_info(self, admin_password: str | None = None) -> dict[str, Any] | None:
         """Get unit information from the /unitinfo endpoint using admin credentials"""
         try:
-            url = f"http://{self.device_ip}/unitinfo"
+            url = f"http://{self.device_ip}:{self.port}/unitinfo"
             # Use provided password or fall back to instance default
             password = admin_password or self.admin_password
             auth = HTTPBasicAuth(self.admin_username, password)
 
             logger.debug(f"Fetching unit info from {url}")
 
-            response = self.session.get(url, auth=auth, timeout=10)
+            response = self.session.get(url, auth=auth, timeout=2)
 
             if response.status_code == 200:
                 logger.debug(f"Unit info HTML response received ({len(response.text)} chars)")

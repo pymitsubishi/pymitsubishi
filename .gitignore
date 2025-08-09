@@ -61,6 +61,11 @@ venv.bak/
 .env.local
 config.local.py
 
+# Temporary files
+COMMIT_MESSAGE.md
+*.tmp
+*.temp
+
 # Documentation
 docs/_build/
 

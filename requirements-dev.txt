@@ -17,8 +17,7 @@ ruff>=0.1.0
 # Pre-commit hooks
 pre-commit>=3.4.0
 
-# Security scanning
-bandit[toml]>=1.7.5
+# Security tools
 
 # Additional quality checks
 pylint>=3.0.0

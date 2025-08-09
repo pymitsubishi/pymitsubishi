@@ -74,7 +74,6 @@ ignore = [
     "E501",  # line too long (handled by formatter)
     "E741",  # ambiguous variable name
     "B008",  # do not perform function calls in argument defaults
-    "B904",  # raise-without-from-inside-except
     "C901",  # too complex
     "SIM105", # Use contextlib.suppress(...) - sometimes explicit is better
     "SIM114", # Combine if branches using logical or - can hurt readability

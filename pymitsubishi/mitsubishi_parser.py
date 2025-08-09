@@ -366,7 +366,7 @@ def analyze_undocumented_bits(payload: str) -> dict[str, Any]:
 
     except (ValueError, IndexError) as e:
         analysis["parse_error"] = str(e)
-        logger.debug(f"Error analyzing undocumented bits in payload {payload[:20]}...: {e}")
+        logger.warning(f"Error analyzing undocumented bits in payload {payload[:20]}...: {e}")
 
     return analysis
 
@@ -524,7 +524,7 @@ def parse_energy_states(payload: str, general_states: GeneralStates | None = Non
             estimated_power_watts=estimated_power,
         )
     except (ValueError, IndexError) as e:
-        logger.debug(f"Failed to parse energy states from payload {payload[:20]}...: {e}")
+        logger.warning(f"Failed to parse energy states from payload {payload[:20]}...: {e}")
         return None
 
 
@@ -609,7 +609,7 @@ def parse_general_states(payload: str) -> GeneralStates | None:
             else None,
         )
     except (ValueError, IndexError) as e:
-        logger.debug(f"Failed to parse general states from payload {payload[:20]}...: {e}")
+        logger.warning(f"Failed to parse general states from payload {payload[:20]}...: {e}")
         return None
 
 
@@ -632,7 +632,7 @@ def parse_sensor_states(payload: str) -> SensorStates | None:
             wind_speed_pr557=wind_speed_pr557,
         )
     except (ValueError, IndexError) as e:
-        logger.debug(f"Failed to parse sensor states from payload {payload[:20]}...: {e}")
+        logger.warning(f"Failed to parse sensor states from payload {payload[:20]}...: {e}")
         return None
 
 
@@ -652,7 +652,7 @@ def parse_error_states(payload: str) -> ErrorStates | None:
             error_code=error_code,
         )
     except (ValueError, IndexError) as e:
-        logger.debug(f"Failed to parse error states from payload {payload[:20]}...: {e}")
+        logger.warning(f"Failed to parse error states from payload {payload[:20]}...: {e}")
         return None
 
 

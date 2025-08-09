@@ -158,7 +158,7 @@ class MitsubishiController:
     def _check_state_available(self) -> bool:
         """Check if device state is available"""
         if not self.state.general:
-            logger.info("❌ No device state available. Fetch status first.")
+            logger.warning("No device state available. Fetch status first.")
             return False
         return True
 
@@ -206,7 +206,7 @@ class MitsubishiController:
         # Convert to 0.1°C units and validate range
         temp_units = int(temperature_celsius * 10)
         if temp_units < 160 or temp_units > 320:  # 16°C to 32°C
-            logger.info(f"❌ Temperature {temperature_celsius}°C is out of range (16-32°C)")
+            logger.warning(f"Temperature {temperature_celsius}°C is out of range (16-32°C)")
             return False
 
         updated_state = self._create_updated_state(temperature=temp_units)
@@ -234,7 +234,7 @@ class MitsubishiController:
             return False
 
         if side.lower() not in ["right", "left"]:
-            logger.info("❌ Side must be 'right' or 'left'")
+            logger.warning("Side must be 'right' or 'left'")
             return False
 
         if side.lower() == "right":
@@ -258,7 +258,7 @@ class MitsubishiController:
             return False
 
         if setting < 0 or setting > 100:
-            logger.info("❌ Dehumidifier setting must be between 0-100")
+            logger.warning("Dehumidifier setting must be between 0-100")
             return False
 
         updated_state = self._create_updated_state(dehum_setting=setting)

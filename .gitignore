@@ -72,7 +72,20 @@ docs/_build/
 .dmypy.json
 dmypy.json
 
+# Ruff
+.ruff_cache/
+
 # Coverage files
 .coverage
+.coverage.*
 coverage.xml
+*.cover
 htmlcov/
+
+# Pre-commit
+.pre-commit-config.yaml.bak
+
+# Local virtual environments
+.venv/
+venv*/
+ENV*/

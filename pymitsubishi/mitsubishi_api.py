@@ -100,22 +100,22 @@ class MitsubishiAPI:
             decrypted = cipher.decrypt(encrypted_data)
 
             logger.debug(f"Decrypted raw length: {len(decrypted)}")
-            logger.debug(f"Decrypted raw (first 64 bytes): {decrypted[:64]}")
-            logger.debug(f"Decrypted raw (last 64 bytes): {decrypted[-64:]}")
+            logger.debug(f"Decrypted raw (first 64 bytes): {decrypted[:64].hex()}")
+            logger.debug(f"Decrypted raw (last 64 bytes): {decrypted[-64:].hex()}")
 
             # Remove zero padding
             decrypted_clean = decrypted.rstrip(b"\x00")
 
             logger.debug(f"After padding removal length: {len(decrypted_clean)}")
-            logger.debug(f"Non-zero bytes at end: {decrypted_clean[-20:]}")
+            logger.debug(f"Non-zero bytes at end: {decrypted_clean[-20:].hex()}")
 
             # Try to decode as UTF-8
             try:
-                result = decrypted_clean.decode("utf-8")
+                result: str = decrypted_clean.decode("utf-8")
                 return result
             except UnicodeDecodeError as ude:
                 logger.debug(f"UTF-8 decode error at position {ude.start}: {ude.reason}")
-                logger.debug(f"Problematic bytes: {decrypted_clean[max(0, ude.start - 10) : ude.start + 10]}")
+                logger.debug(f"Problematic bytes: {decrypted_clean[max(0, ude.start - 10) : ude.start + 10].hex()}")
 
                 # Try to find the actual end of the XML by looking for closing tags
                 xml_end_patterns = [b"</LSV>", b"</CSV>", b"</ESV>"]
@@ -124,17 +124,18 @@ class MitsubishiAPI:
                     if pos != -1:
                         end_pos = pos + len(pattern)
                         truncated = decrypted_clean[:end_pos]
-                        logger.debug(f"Found XML end pattern {pattern} at position {pos}")
+                        logger.debug(f"Found XML end pattern {pattern.decode('utf-8')} at position {pos}")
                         logger.debug(f"Truncated length: {len(truncated)}")
                         try:
-                            return truncated.decode("utf-8")
+                            result_str: str = truncated.decode("utf-8")
+                            return result_str
                         except UnicodeDecodeError:
                             continue
 
                 # If no valid XML end found, try errors='ignore'
-                result = decrypted_clean.decode("utf-8", errors="ignore")
-                logger.debug(f"Using errors='ignore', result length: {len(result)}")
-                return result
+                result_fallback: str = decrypted_clean.decode("utf-8", errors="ignore")
+                logger.debug(f"Using errors='ignore', result length: {len(result_fallback)}")
+                return result_fallback
 
         except Exception as e:
             logger.error(f"Decryption error: {e}")
@@ -199,7 +200,7 @@ class MitsubishiAPI:
         payload_xml = f"<CSV><CONNECT>ON</CONNECT><CODE><VALUE>{hex_command}</VALUE></CODE></CSV>"
         return self.make_request(payload_xml)
 
-    def get_unit_info(self, admin_password: str = None) -> dict[str, Any] | None:
+    def get_unit_info(self, admin_password: str | None = None) -> dict[str, Any] | None:
         """Get unit information from the /unitinfo endpoint using admin credentials"""
         try:
             url = f"http://{self.device_ip}/unitinfo"
@@ -226,7 +227,7 @@ class MitsubishiAPI:
 
     def _parse_unit_info_html(self, html_content: str) -> dict[str, Any]:
         """Parse unit info HTML response to extract structured data"""
-        unit_info = {"adaptor_info": {}, "unit_info": {}}
+        unit_info: dict[str, Any] = {"adaptor_info": {}, "unit_info": {}}
 
         try:
             # Extract data using regex patterns to parse the HTML structure

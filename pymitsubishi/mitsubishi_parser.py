@@ -85,7 +85,7 @@ class GeneralStates:
     mode_raw_value: int = 0  # Raw mode value before i-See processing
     wide_vane_adjustment: bool = False  # Wide vane adjustment flag (SwiCago wideVaneAdj)
     temp_mode: bool = False  # Direct temperature mode flag (SwiCago tempMode)
-    undocumented_flags: dict[str, Any] = None  # Store unknown bit patterns for analysis
+    undocumented_flags: dict[str, Any] | None = None  # Store unknown bit patterns for analysis
 
 
 @dataclass
@@ -130,7 +130,7 @@ class ParsedDeviceState:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization"""
-        result = {
+        result: dict[str, Any] = {
             "device_info": {
                 "mac": self.mac,
                 "serial": self.serial,
@@ -140,7 +140,7 @@ class ParsedDeviceState:
         }
 
         if self.general:
-            result["general_states"] = {
+            general_dict: dict[str, Any] = {
                 "power": "ON" if self.general.power_on_off == PowerOnOff.ON else "OFF",
                 "mode": self.general.drive_mode.name,
                 "target_temperature_celsius": self.general.temperature / 10.0,
@@ -155,12 +155,13 @@ class ParsedDeviceState:
                 "i_see_sensor_active": self.general.i_see_sensor,
                 "mode_raw_value": self.general.mode_raw_value,
             }
+            result["general_states"] = general_dict
             # Include undocumented flags analysis if present
             if self.general.undocumented_flags:
                 result["general_states"]["undocumented_analysis"] = self.general.undocumented_flags
 
         if self.sensors:
-            result["sensor_states"] = {
+            sensor_dict: dict[str, Any] = {
                 "room_temperature_celsius": self.sensors.room_temperature / 10.0,
                 "outside_temperature_celsius": self.sensors.outside_temperature / 10.0
                 if self.sensors.outside_temperature
@@ -168,19 +169,22 @@ class ParsedDeviceState:
                 "thermal_sensor_active": self.sensors.thermal_sensor,
                 "wind_speed_pr557": self.sensors.wind_speed_pr557,
             }
+            result["sensor_states"] = sensor_dict
 
         if self.errors:
-            result["error_states"] = {
+            error_dict: dict[str, Any] = {
                 "abnormal_state": self.errors.is_abnormal_state,
                 "error_code": self.errors.error_code,
             }
+            result["error_states"] = error_dict
 
         if self.energy:
-            result["energy_states"] = {
+            energy_dict: dict[str, Any] = {
                 "compressor_frequency": self.energy.compressor_frequency,
                 "operating": self.energy.operating,
                 "estimated_power_watts": self.energy.estimated_power_watts,
             }
+            result["energy_states"] = energy_dict
 
         return result
 
@@ -288,12 +292,21 @@ def analyze_undocumented_bits(payload: str) -> dict[str, Any]:
     This function helps identify unknown functionality by examining
     bit patterns that haven't been documented yet.
     """
-    analysis = {"payload_length": len(payload), "suspicious_patterns": [], "high_bits_set": [], "unknown_segments": {}}
+    analysis: dict[str, Any] = {
+        "payload_length": len(payload),
+        "suspicious_patterns": [],
+        "high_bits_set": [],
+        "unknown_segments": {},
+    }
 
     if len(payload) < 42:
         return analysis
 
     try:
+        suspicious_patterns: list[dict[str, Any]] = []
+        high_bits_set: list[dict[str, Any]] = []
+        unknown_segments: dict[int, dict[str, Any]] = {}
+
         # Examine each byte for unusual patterns
         for i in range(0, min(len(payload), 42), 2):
             if i + 2 <= len(payload):
@@ -303,7 +316,7 @@ def analyze_undocumented_bits(payload: str) -> dict[str, Any]:
 
                 # Look for high bits that might indicate additional flags
                 if byte_val & 0x80:  # High bit set
-                    analysis["high_bits_set"].append(
+                    high_bits_set.append(
                         {"position": position, "hex": byte_hex, "value": byte_val, "binary": f"{byte_val:08b}"}
                     )
 
@@ -322,7 +335,7 @@ def analyze_undocumented_bits(payload: str) -> dict[str, Any]:
                     0x19,
                     0x1B,
                 ]:  # Mode byte position
-                    analysis["suspicious_patterns"].append(
+                    suspicious_patterns.append(
                         {
                             "type": "unknown_mode",
                             "position": position,
@@ -335,11 +348,15 @@ def analyze_undocumented_bits(payload: str) -> dict[str, Any]:
                 # Check for non-zero values in typically unused positions
                 unused_positions = [12, 17, 19]  # Add more as we discover them
                 if position in unused_positions and byte_val != 0:
-                    analysis["unknown_segments"][position] = {
+                    unknown_segments[position] = {
                         "hex": byte_hex,
                         "value": byte_val,
                         "binary": f"{byte_val:08b}",
                     }
+
+        analysis["suspicious_patterns"] = suspicious_patterns
+        analysis["high_bits_set"] = high_bits_set
+        analysis["unknown_segments"] = unknown_segments
 
     except (ValueError, IndexError) as e:
         analysis["parse_error"] = str(e)

@@ -65,7 +65,7 @@ class ProfileCodeAnalysis:
     feature_flags: int
     capability_field: int
     device_type: str
-    inferred_capabilities: list[CapabilityType]
+    inferred_capabilities: list[str]  # Changed from list[CapabilityType] to list[str]
     raw_data: bytes
 
 
@@ -109,7 +109,7 @@ class DeviceCapabilities:
             device_type = "generic_hvac"
 
             # Analyze capabilities from the flags
-            inferred_capabilities = []
+            inferred_capabilities: list[str] = []
 
             # Generic capability bit analysis for feature flags
             for bit in range(16):
@@ -235,16 +235,16 @@ class CapabilityDetector:
 
                 # Extract basic device info
                 mac_elem = root.find(".//MAC")
-                if mac_elem is not None:
+                if mac_elem is not None and mac_elem.text is not None:
                     self.capabilities.mac_address = mac_elem.text
 
                 serial_elem = root.find(".//SERIAL")
-                if serial_elem is not None:
+                if serial_elem is not None and serial_elem.text is not None:
                     self.capabilities.serial_number = serial_elem.text
 
                 # Look for firmware/version info
                 version_elem = root.find(".//VERSION")
-                if version_elem is not None:
+                if version_elem is not None and version_elem.text is not None:
                     self.capabilities.firmware_version = version_elem.text
 
                 # Extract and analyze ProfileCodes - handle both LSV and CSV formats
@@ -379,8 +379,15 @@ class CapabilityDetector:
         validated = []
 
         for predicted_cap in predictions:
-            if self.capabilities.has_capability(predicted_cap):
-                cap = self.capabilities.get_capability(predicted_cap)
+            # Skip string predictions that aren't valid CapabilityType values
+            try:
+                cap_type = CapabilityType(predicted_cap)
+            except ValueError:
+                logger.info(f"  ⚠️ {predicted_cap} - not a valid CapabilityType")
+                continue
+
+            if self.capabilities.has_capability(cap_type):
+                cap = self.capabilities.get_capability(cap_type)
                 if cap and cap.metadata.get("validated_by_group_code"):
                     validated.append(predicted_cap)
                     logger.info(
@@ -475,7 +482,7 @@ class CapabilityDetector:
                     feature_flags=pa_data["feature_flags"],
                     capability_field=pa_data["capability_field"],
                     device_type=pa_data["device_type"],
-                    inferred_capabilities=[CapabilityType(cap) for cap in pa_data["inferred_capabilities"]],
+                    inferred_capabilities=pa_data["inferred_capabilities"],  # Already list[str]
                     raw_data=bytes.fromhex(pa_data["raw_data"]),
                 )
 

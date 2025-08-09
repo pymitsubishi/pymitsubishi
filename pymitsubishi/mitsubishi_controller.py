@@ -275,8 +275,8 @@ class MitsubishiController:
         if response:
             if debug:
                 print("✅ Command sent successfully")
-            # Update our local state to reflect the change
-            self.state.general = state
+            # Parse the response to get the actual device state
+            self._parse_status_response(response)
             return True
         else:
             if debug:
@@ -296,8 +296,8 @@ class MitsubishiController:
         if response:
             if debug:
                 print("✅ Extend08 command sent successfully")
-            # Update our local state to reflect the change
-            self.state.general = state
+            # Parse the response to get the actual device state
+            self._parse_status_response(response)
             return True
         else:
             if debug:

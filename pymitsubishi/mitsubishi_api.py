@@ -96,6 +96,13 @@ class MitsubishiAPI:
                 print(f"[DEBUG] Decrypted raw length: {len(decrypted)}")
                 print(f"[DEBUG] Decrypted raw (first 64 bytes): {decrypted[:64]}")
                 print(f"[DEBUG] Decrypted raw (last 64 bytes): {decrypted[-64:]}")
+                print(f"[DEBUG] Full decrypted response (as bytes): {decrypted}")
+                # Try to show as much readable text as possible
+                try:
+                    readable_part = decrypted.rstrip(b'\x00').decode('utf-8', errors='replace')
+                    print(f"[DEBUG] Full decrypted response (as text): {readable_part}")
+                except:
+                    print(f"[DEBUG] Full decrypted response (hex): {decrypted.hex()}")
             
             # Remove zero padding
             decrypted_clean = decrypted.rstrip(b'\x00')
@@ -155,7 +162,7 @@ class MitsubishiAPI:
 
         headers = {
             'Host': f'{self.device_ip}:80',
-            'Content-Type': 'text/plain;chrset=UTF-8',
+            'Content-Type': 'text/plain; charset=UTF-8',
             'Connection': 'keep-alive',
             'Proxy-Connection': 'keep-alive',
             'Accept': '*/*',

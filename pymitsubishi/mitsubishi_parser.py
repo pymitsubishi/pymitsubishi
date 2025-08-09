@@ -24,13 +24,14 @@ class PowerOnOff(Enum):
 
 
 class DriveMode(Enum):
-    HEATER = "01"
-    DEHUM = "02"
-    COOLER = "03"
-    AUTO = "08"
-    AUTO_COOLER = "1b"
-    AUTO_HEATER = "19"
-    FAN = "07"
+    AUTO = 0
+    HEATER = 1
+    DEHUM = 2
+    COOLER = 3
+    FAN = 7
+    # Extended modes (these appear to be special cases)
+    AUTO_COOLER = 0x1B  # 27 in decimal
+    AUTO_HEATER = 0x19  # 25 in decimal
 
 
 class WindSpeed(Enum):
@@ -242,29 +243,32 @@ def get_on_off_status(segment: str) -> PowerOnOff:
         return PowerOnOff.OFF
 
 
-def get_drive_mode(segment: str) -> DriveMode:
-    """Parse drive mode from segment"""
-    mode_map = {
-        "03": DriveMode.COOLER,
-        "0b": DriveMode.COOLER,
-        "01": DriveMode.HEATER,
-        "09": DriveMode.HEATER,
-        "08": DriveMode.AUTO,
-        "00": DriveMode.DEHUM,
-        "02": DriveMode.DEHUM,
-        "0a": DriveMode.DEHUM,
-        "0c": DriveMode.DEHUM,
-        "1b": DriveMode.AUTO_COOLER,
-        "19": DriveMode.AUTO_HEATER,
-    }
-    return mode_map.get(segment, DriveMode.FAN)
+def get_drive_mode(mode_value: int) -> DriveMode:
+    """Parse drive mode from integer value
+
+    Args:
+        mode_value: Integer mode value (typically masked with 0x07)
+    """
+    # Map the basic mode values (0-7)
+    try:
+        return DriveMode(mode_value)
+    except ValueError:
+        # Handle special extended modes
+        if mode_value == 0x1B:
+            return DriveMode.AUTO_COOLER
+        elif mode_value == 0x19:
+            return DriveMode.AUTO_HEATER
+        # Default to FAN for unknown modes
+        return DriveMode.FAN
 
 
 def parse_mode_with_i_see(mode_byte: int) -> tuple[DriveMode, bool, int]:
-    """Parse drive mode considering i-See sensor flag (SwiCago enhancement)
+    """Parse drive mode considering i-See sensor flag
 
-    Based on SwiCago implementation: i-See sensor is detected when mode > 0x08.
-    The actual mode is extracted by subtracting 0x08 from the raw mode value.
+    Based on niobos fork and SwiCago implementation:
+    - Bits 0-2 (0x07): Drive mode
+    - Bit 3 (0x08): i-See sensor flag
+    - Bits 4-7 (0xF0): Unknown/reserved
 
     Args:
         mode_byte: Raw mode byte value from payload
@@ -272,16 +276,14 @@ def parse_mode_with_i_see(mode_byte: int) -> tuple[DriveMode, bool, int]:
     Returns:
         tuple of (drive_mode, i_see_active, raw_mode_value)
     """
-    # Check if i-See sensor flag is set (mode > 0x08 as per SwiCago)
-    i_see_active = mode_byte > 0x08
+    # Extract drive mode from lower 3 bits
+    actual_mode_value = mode_byte & 0x07
 
-    # Extract actual mode by removing i-See flag if present
-    # This matches SwiCago's logic: receivedSettings.iSee ? (data[4] - 0x08) : data[4]
-    actual_mode_value = mode_byte - 0x08 if i_see_active else mode_byte
+    # Check if i-See sensor flag is set (bit 3)
+    i_see_active = bool(mode_byte & 0x08)
 
-    # Map the mode value to DriveMode enum
-    mode_hex = f"{actual_mode_value:02x}"
-    drive_mode = get_drive_mode(mode_hex)
+    # Get the drive mode enum
+    drive_mode = get_drive_mode(actual_mode_value)
 
     return drive_mode, i_see_active, mode_byte
 
@@ -716,7 +718,7 @@ def generate_general_command(general_states: GeneralStates, controls: dict[str, 
     segments["segment1"] = f"{segment1_value:02x}"
     segments["segment2"] = f"{segment2_value:02x}"
     segments["segment3"] = general_states.power_on_off.value
-    segments["segment4"] = general_states.drive_mode.value
+    segments["segment4"] = f"{general_states.drive_mode.value:02x}"  # Convert int to hex string
     segments["segment6"] = f"{general_states.wind_speed.value:02x}"
     segments["segment7"] = f"{general_states.vertical_wind_direction_right.value:02x}"
     segments["segment13"] = f"{general_states.horizontal_wind_direction.value:02x}"

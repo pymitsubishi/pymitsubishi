@@ -89,7 +89,8 @@ class TestModeControl:
         expected_hex = test_case["hex_value"]
 
         mode = DriveMode[mode_name]
-        assert mode.value == expected_hex
+        # Convert the hex string to integer for comparison
+        assert mode.value == int(expected_hex, 16)
 
 
 @patch("pymitsubishi.mitsubishi_api.requests.post")

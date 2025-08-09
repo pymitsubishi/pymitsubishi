@@ -99,22 +99,19 @@ class TestModeAndStatusParsing:
     def test_drive_mode_parsing(self):
         """Test drive mode parsing with real mode codes."""
         # Real device mode mappings from actual responses
+        # Note: get_drive_mode expects integer values, not hex strings
         mode_mappings = {
-            "01": DriveMode.HEATER,
-            "02": DriveMode.DEHUM,
-            "03": DriveMode.COOLER,
-            "07": DriveMode.FAN,
-            "08": DriveMode.AUTO,
-            "09": DriveMode.HEATER,
-            "0a": DriveMode.DEHUM,
-            "0b": DriveMode.COOLER,
-            "0c": DriveMode.DEHUM,
-            "19": DriveMode.AUTO_HEATER,
-            "1b": DriveMode.AUTO_COOLER,
+            0x01: DriveMode.HEATER,
+            0x02: DriveMode.DEHUM,
+            0x03: DriveMode.COOLER,
+            0x07: DriveMode.FAN,
+            0x08: DriveMode.AUTO,
+            0x19: DriveMode.AUTO_HEATER,
+            0x1B: DriveMode.AUTO_COOLER,
         }
 
-        for code, expected_mode in mode_mappings.items():
-            parsed_mode = get_drive_mode(code)
+        for code_int, expected_mode in mode_mappings.items():
+            parsed_mode = get_drive_mode(code_int)
             assert parsed_mode == expected_mode
 
     def test_wind_speed_parsing(self):

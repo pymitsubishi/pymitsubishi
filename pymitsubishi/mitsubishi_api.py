@@ -108,6 +108,7 @@ class MitsubishiAPI:
             # Try to decode as UTF-8
             try:
                 result: str = decrypted_clean.decode("utf-8")
+                logger.debug(f"Decrypted XML response: {result}")
                 return result
             except UnicodeDecodeError as ude:
                 logger.debug(f"UTF-8 decode error at position {ude.start}: {ude.reason}")

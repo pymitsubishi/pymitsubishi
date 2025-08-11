@@ -168,6 +168,7 @@ class GeneralStates:
         - Wide vane adjustment flag detection
         - i-See sensor detection from mode byte
         """
+        logger.debug(f"Parsing general states payload: {payload}")
         if len(payload) < 42:
             return None
 
@@ -459,6 +460,7 @@ class SensorStates:
     @classmethod
     def parse_sensor_states(cls, payload: str) -> SensorStates | None:
         """Parse sensor states from hex payload"""
+        logger.debug(f"Parsing sensor states payload: {payload}")
         if len(payload) < 42:
             return None
 
@@ -507,6 +509,7 @@ class EnergyStates:
             payload: Hex payload string
             general_states: Optional general states for power estimation context
         """
+        logger.debug(f"Parsing energy states payload: {payload}")
         if len(payload) < 24:  # Need at least enough bytes for data[4]
             return None
 
@@ -606,6 +609,7 @@ class ErrorStates:
     @classmethod
     def parse_error_states(cls, payload: str) -> ErrorStates | None:
         """Parse error states from hex payload"""
+        logger.debug(f"Parsing error states payload: {payload}")
         if len(payload) < 22:
             return None
 
@@ -661,6 +665,8 @@ class ParsedDeviceState:
             elif EnergyStates.is_energy_states_payload(hex_lower):
                 # Parse energy states with context from general states if available
                 parsed_state.energy = EnergyStates.parse_energy_states(hex_lower, parsed_state.general)
+            else:
+                logger.debug(f"Ignoring unknown code value: {hex_value}")
 
         return parsed_state
 

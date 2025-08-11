@@ -723,7 +723,7 @@ def generate_general_command(general_states: GeneralStates, controls: dict[str, 
         payload += segments.get(segment_key, "00")
 
     # Calculate and append FCC
-    fcc = calc_fcc(payload)
+    fcc = format(calc_fcc(bytes.fromhex(payload)), "02x")
     return "fc" + payload + fcc
 
 
@@ -748,5 +748,5 @@ def generate_extend08_command(general_states: GeneralStates, controls: dict[str,
     payload = (
         "4101301008" + segment_x + "0000" + segment_y + segment_z + segment_a + buzzer_segment + "0000000000000000"
     )
-    fcc = calc_fcc(payload)
+    fcc = format(calc_fcc(bytes.fromhex(payload)), "02x")
     return "fc" + payload + fcc

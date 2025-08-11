@@ -9,12 +9,15 @@ import pytest
 
 from pymitsubishi.mitsubishi_parser import (
     DriveMode,
+    GeneralStates,
     ParsedDeviceState,
     PowerOnOff,
     WindSpeed,
     calc_fcc,
     convert_temperature,
     convert_temperature_to_segment,
+    generate_extend08_command,
+    generate_general_command,
     get_drive_mode,
     get_normalized_temperature,
     get_on_off_status,
@@ -37,6 +40,16 @@ from .test_fixtures import SAMPLE_CODE_VALUES, SAMPLE_PROFILE_CODES
 def test_fcc(payload, expected):
     checksum = calc_fcc(payload)
     assert checksum == expected
+
+
+def test_generate_general_command():
+    cmd = generate_general_command(GeneralStates(), {})
+    assert cmd == "fc410130100100020008090000000000000000ac417d"
+
+
+def test_generate_extend08_command():
+    cmd = generate_extend08_command(GeneralStates(), {})
+    assert cmd == "fc410130100800000000000000000000000000000076"
 
 
 class TestTemperatureConversion:

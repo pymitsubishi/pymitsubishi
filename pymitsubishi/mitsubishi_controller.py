@@ -33,9 +33,9 @@ class MitsubishiController:
         self.state = ParsedDeviceState()
 
     @classmethod
-    def create(cls, device_ip: str, port: int = 80, encryption_key: str | bytes = "unregistered"):
+    def create(cls, device_host_port: str, encryption_key: str | bytes = "unregistered"):
         """Create a MitsubishiController with the specified port and encryption key"""
-        api = MitsubishiAPI(device_ip=device_ip, port=port, encryption_key=encryption_key)
+        api = MitsubishiAPI(device_host_port=device_host_port, encryption_key=encryption_key)
         return cls(api)
 
     def fetch_status(self, detect_capabilities: bool = True) -> bool:

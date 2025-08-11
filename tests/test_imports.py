@@ -39,7 +39,7 @@ def test_api_initialization():
     from pymitsubishi import MitsubishiAPI
 
     api = MitsubishiAPI("192.168.1.100")  # Dummy IP
-    assert api.device_ip == "192.168.1.100"
+    assert api.device_host_port == "192.168.1.100"
 
 
 def test_controller_initialization():
@@ -48,4 +48,4 @@ def test_controller_initialization():
 
     api = MitsubishiAPI("192.168.1.100")  # Dummy IP
     controller = MitsubishiController(api)
-    assert controller.api.device_ip == "192.168.1.100"
+    assert controller.api.device_host_port == "192.168.1.100"

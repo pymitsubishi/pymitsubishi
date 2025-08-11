@@ -31,14 +31,12 @@ class MitsubishiAPI:
 
     def __init__(
         self,
-        device_ip: str,
-        port: int = 80,
+        device_host_port: str,
         encryption_key: bytes | str = STATIC_KEY,
         admin_username: str = "admin",
         admin_password: str = "me1debug@0567",
     ):
-        self.device_ip = device_ip
-        self.port = port
+        self.device_host_port = device_host_port
         # Handle both bytes and string encryption keys
         if isinstance(encryption_key, str):
             encryption_key = encryption_key.encode("utf-8")
@@ -148,7 +146,7 @@ class MitsubishiAPI:
         logger.debug(request_body)
 
         headers = {
-            "Host": f"{self.device_ip}:{self.port}",
+            "Host": f"{self.device_host_port}",
             "Content-Type": "text/plain;chrset=UTF-8",
             "Connection": "keep-alive",
             "Proxy-Connection": "keep-alive",
@@ -157,7 +155,7 @@ class MitsubishiAPI:
             "Accept-Language": "zh-Hant-JP;q=1.0, ja-JP;q=0.9",
         }
 
-        url = f"http://{self.device_ip}:{self.port}/smart"
+        url = f"http://{self.device_host_port}/smart"
 
         try:
             response = self.session.post(url, data=request_body, headers=headers, timeout=2)
@@ -198,7 +196,7 @@ class MitsubishiAPI:
     def get_unit_info(self, admin_password: str | None = None) -> dict[str, Any] | None:
         """Get unit information from the /unitinfo endpoint using admin credentials"""
         try:
-            url = f"http://{self.device_ip}:{self.port}/unitinfo"
+            url = f"http://{self.device_host_port}/unitinfo"
             # Use provided password or fall back to instance default
             password = admin_password or self.admin_password
             auth = HTTPBasicAuth(self.admin_username, password)

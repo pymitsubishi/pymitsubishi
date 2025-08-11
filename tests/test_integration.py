@@ -139,7 +139,7 @@ class TestMitsubishiAPIIntegration:
         assert decrypted == original_xml
 
         # Verify the API can be initialized
-        assert api.device_ip == "192.168.1.100"
+        assert api.device_host_port == "192.168.1.100"
 
 
 class TestMitsubishiControllerIntegration:

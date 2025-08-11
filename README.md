@@ -31,7 +31,7 @@ pip install pymitsubishi
 from pymitsubishi import MitsubishiAPI, MitsubishiController
 
 # Initialize the API and controller
-api = MitsubishiAPI(device_ip="192.168.1.100")
+api = MitsubishiAPI(device_host_port="192.168.1.100")
 controller = MitsubishiController(api=api)
 
 # Fetch device status

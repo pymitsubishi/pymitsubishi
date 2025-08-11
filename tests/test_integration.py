@@ -278,17 +278,19 @@ class TestRealWorldScenarios:
         # This is a placeholder for actual control testing
         pass
 
-    def test_led_pattern_parsing(self):
+    @pytest.mark.parametrize(
+        "pattern",
+        LED_PATTERNS.values(),
+    )
+    def test_led_pattern_parsing(self, pattern):
         """Test parsing of LED patterns from real device data."""
-        # Test that LED patterns are correctly extracted
-        for _led_name, pattern in LED_PATTERNS.items():
-            assert ":" in pattern  # Should have on:off pattern
-            assert "," in pattern  # Should have multiple states
+        assert ":" in pattern  # Should have on:off pattern
+        assert "," in pattern  # Should have multiple states
 
-            # Parse the pattern
-            states = pattern.split(",")
-            for state in states:
-                assert ":" in state  # Each state should have on:off timing
+        # Parse the pattern
+        states = pattern.split(",")
+        for state in states:
+            assert ":" in state  # Each state should have on:off timing
 
 
 if __name__ == "__main__":

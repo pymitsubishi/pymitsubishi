@@ -16,13 +16,7 @@ from pymitsubishi.mitsubishi_parser import (
     calc_fcc,
     convert_temperature,
     convert_temperature_to_segment,
-    generate_extend08_command,
-    generate_general_command,
-    get_drive_mode,
     get_normalized_temperature,
-    get_on_off_status,
-    get_wind_speed,
-    parse_code_values,
 )
 
 from .test_fixtures import SAMPLE_CODE_VALUES, SAMPLE_PROFILE_CODES
@@ -43,12 +37,12 @@ def test_fcc(payload, expected):
 
 
 def test_generate_general_command():
-    cmd = generate_general_command(GeneralStates(), {})
+    cmd = GeneralStates().generate_general_command({})
     assert cmd == "fc410130100100020008090000000000000000ac417d"
 
 
 def test_generate_extend08_command():
-    cmd = generate_extend08_command(GeneralStates(), {})
+    cmd = GeneralStates().generate_extend08_command({})
     assert cmd == "fc410130100800000000000000000000000000000076"
 
 
@@ -97,7 +91,7 @@ class TestModeAndStatusParsing:
         power_codes = ["00", "01", "02", "03", "ff"]
 
         for code in power_codes:
-            status = get_on_off_status(code)
+            status = PowerOnOff.get_on_off_status(code)
             assert status in [PowerOnOff.ON, PowerOnOff.OFF]
 
             # Codes 01 and 02 should be ON, others typically OFF
@@ -119,7 +113,7 @@ class TestModeAndStatusParsing:
         }
 
         for code_int, expected_mode in mode_mappings.items():
-            parsed_mode = get_drive_mode(code_int)
+            parsed_mode = DriveMode.get_drive_mode(code_int)
             assert parsed_mode == expected_mode
 
     def test_wind_speed_parsing(self):
@@ -128,7 +122,7 @@ class TestModeAndStatusParsing:
         speed_codes = ["00", "01", "02", "03", "05", "06", "ff"]
 
         for code in speed_codes:
-            speed = get_wind_speed(code)
+            speed = WindSpeed.get_wind_speed(code)
             assert isinstance(speed, WindSpeed)
             assert speed in [
                 WindSpeed.AUTO,
@@ -158,7 +152,7 @@ class TestCodeValueParsing:
     def test_code_values_parsing(self):
         """Test parsing of complete code value arrays."""
         # Test that parse_code_values can handle real code arrays
-        parsed_state = parse_code_values(SAMPLE_CODE_VALUES)
+        parsed_state = ParsedDeviceState.parse_code_values(SAMPLE_CODE_VALUES)
 
         # Should return a ParsedDeviceState or None
         assert parsed_state is None or isinstance(parsed_state, ParsedDeviceState)

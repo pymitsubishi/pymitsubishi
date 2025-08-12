@@ -9,13 +9,6 @@ __version__ = "0.2.0"
 
 # Import main classes for easy access
 from .mitsubishi_api import MitsubishiAPI
-from .mitsubishi_capabilities import (
-    CapabilityDetector,
-    CapabilityType,
-    DeviceCapabilities,
-    DeviceCapability,
-    ProfileCodeAnalysis,
-)
 from .mitsubishi_controller import MitsubishiController
 from .mitsubishi_parser import (
     DriveMode,
@@ -34,12 +27,6 @@ __all__ = [
     # Main API classes
     "MitsubishiAPI",
     "MitsubishiController",
-    # Capability detection
-    "CapabilityDetector",
-    "DeviceCapabilities",
-    "DeviceCapability",
-    "CapabilityType",
-    "ProfileCodeAnalysis",
     # Enums and data classes
     "PowerOnOff",
     "DriveMode",

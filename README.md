@@ -55,7 +55,7 @@ api.close()
 ### Capability Detection
 
 ```python
-from pymitsubishi import CapabilityDetector
+from pymitsubishi import CapabilityDetector, CapabilityType
 
 detector = CapabilityDetector(api=api)
 capabilities = detector.detect_all_capabilities()

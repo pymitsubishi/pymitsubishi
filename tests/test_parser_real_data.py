@@ -16,13 +16,7 @@ from pymitsubishi.mitsubishi_parser import (
     calc_fcc,
     convert_temperature,
     convert_temperature_to_segment,
-    generate_extend08_command,
-    generate_general_command,
-    get_drive_mode,
     get_normalized_temperature,
-    get_on_off_status,
-    get_wind_speed,
-    parse_code_values,
 )
 
 from .test_fixtures import SAMPLE_CODE_VALUES, SAMPLE_PROFILE_CODES
@@ -43,12 +37,12 @@ def test_fcc(payload, expected):
 
 
 def test_generate_general_command():
-    cmd = generate_general_command(GeneralStates(), {})
+    cmd = GeneralStates().generate_general_command({})
     assert cmd == "fc410130100100020008090000000000000000ac417d"
 
 
 def test_generate_extend08_command():
-    cmd = generate_extend08_command(GeneralStates(), {})
+    cmd = GeneralStates().generate_extend08_command({})
     assert cmd == "fc410130100800000000000000000000000000000076"
 
 
@@ -91,74 +85,94 @@ class TestTemperatureConversion:
 class TestModeAndStatusParsing:
     """Test parsing of mode and status values from real device responses."""
 
-    def test_power_status_parsing(self):
+    @pytest.mark.parametrize(
+        "code",
+        [
+            "00",
+            "01",
+            "02",
+            "03",
+            "ff",
+        ],
+    )
+    def test_power_status_parsing(self, code):
         """Test power status parsing with real status codes."""
         # Real device power status patterns
-        power_codes = ["00", "01", "02", "03", "ff"]
+        status = PowerOnOff.get_on_off_status(code)
+        assert status in [PowerOnOff.ON, PowerOnOff.OFF]
 
-        for code in power_codes:
-            status = get_on_off_status(code)
-            assert status in [PowerOnOff.ON, PowerOnOff.OFF]
+        # Codes 01 and 02 should be ON, others typically OFF
+        if code in ["01", "02"]:
+            assert status == PowerOnOff.ON
 
-            # Codes 01 and 02 should be ON, others typically OFF
-            if code in ["01", "02"]:
-                assert status == PowerOnOff.ON
-
-    def test_drive_mode_parsing(self):
+    @pytest.mark.parametrize(
+        "mode,expected",
+        [
+            (0x01, DriveMode.HEATER),
+            (0x02, DriveMode.DEHUM),
+            (0x03, DriveMode.COOLER),
+            (0x07, DriveMode.FAN),
+            (0x08, DriveMode.AUTO),
+            (0x19, DriveMode.AUTO_HEATER),
+            (0x1B, DriveMode.AUTO_COOLER),
+        ],
+    )
+    def test_drive_mode_parsing(self, mode, expected):
         """Test drive mode parsing with real mode codes."""
         # Real device mode mappings from actual responses
         # Note: get_drive_mode expects integer values, not hex strings
-        mode_mappings = {
-            0x01: DriveMode.HEATER,
-            0x02: DriveMode.DEHUM,
-            0x03: DriveMode.COOLER,
-            0x07: DriveMode.FAN,
-            0x08: DriveMode.AUTO,
-            0x19: DriveMode.AUTO_HEATER,
-            0x1B: DriveMode.AUTO_COOLER,
-        }
+        parsed_mode = DriveMode.get_drive_mode(mode)
+        assert parsed_mode == expected
 
-        for code_int, expected_mode in mode_mappings.items():
-            parsed_mode = get_drive_mode(code_int)
-            assert parsed_mode == expected_mode
-
-    def test_wind_speed_parsing(self):
+    @pytest.mark.parametrize(
+        "code",
+        [
+            "00",
+            "01",
+            "02",
+            "03",
+            "05",
+            "06",
+            "ff",
+        ],
+    )
+    def test_wind_speed_parsing(self, code):
         """Test wind speed parsing with real speed codes."""
         # Test that wind speed parsing works with common codes
-        speed_codes = ["00", "01", "02", "03", "05", "06", "ff"]
-
-        for code in speed_codes:
-            speed = get_wind_speed(code)
-            assert isinstance(speed, WindSpeed)
-            assert speed in [
-                WindSpeed.AUTO,
-                WindSpeed.LEVEL_1,
-                WindSpeed.LEVEL_2,
-                WindSpeed.LEVEL_3,
-                WindSpeed.LEVEL_4,
-                WindSpeed.LEVEL_FULL,
-            ]
+        speed = WindSpeed.get_wind_speed(code)
+        assert isinstance(speed, WindSpeed)
+        assert speed in [
+            WindSpeed.AUTO,
+            WindSpeed.LEVEL_1,
+            WindSpeed.LEVEL_2,
+            WindSpeed.LEVEL_3,
+            WindSpeed.LEVEL_4,
+            WindSpeed.LEVEL_FULL,
+        ]
 
 
 class TestCodeValueParsing:
     """Test parsing of real CODE values from device responses."""
 
-    def test_code_value_structure(self):
+    @pytest.mark.parametrize(
+        "code_value",
+        SAMPLE_CODE_VALUES,
+    )
+    def test_code_value_structure(self, code_value):
         """Test that real code values have the expected structure."""
-        for code_value in SAMPLE_CODE_VALUES:
-            assert len(code_value) >= 12  # Minimum length for group code extraction
-            assert all(c in "0123456789abcdef" for c in code_value.lower())
+        assert len(code_value) >= 12  # Minimum length for group code extraction
+        assert all(c in "0123456789abcdef" for c in code_value.lower())
 
-            # Extract group code (position 20-22)
-            group_code = code_value[20:22]
-            assert len(group_code) == 2
-            # Allow the group codes that are actually in the test data
-            assert group_code in ["02", "03", "04", "05", "06", "07", "08", "09", "0a"]
+        # Extract group code (position 20-22)
+        group_code = code_value[20:22]
+        assert len(group_code) == 2
+        # Allow the group codes that are actually in the test data
+        assert group_code in ["02", "03", "04", "05", "06", "07", "08", "09", "0a"]
 
     def test_code_values_parsing(self):
         """Test parsing of complete code value arrays."""
         # Test that parse_code_values can handle real code arrays
-        parsed_state = parse_code_values(SAMPLE_CODE_VALUES)
+        parsed_state = ParsedDeviceState.parse_code_values(SAMPLE_CODE_VALUES)
 
         # Should return a ParsedDeviceState or None
         assert parsed_state is None or isinstance(parsed_state, ParsedDeviceState)
@@ -173,11 +187,14 @@ class TestCodeValueParsing:
 class TestProfileCodeAnalysis:
     """Test ProfileCode analysis with real profile data."""
 
-    def test_profile_code_structure(self):
+    @pytest.mark.parametrize(
+        "profile_code",
+        SAMPLE_PROFILE_CODES,
+    )
+    def test_profile_code_structure(self, profile_code):
         """Test that profile codes have the expected structure."""
-        for profile_code in SAMPLE_PROFILE_CODES:
-            assert len(profile_code) == 64  # 32 bytes = 64 hex chars
-            assert all(c in "0123456789abcdef" for c in profile_code.lower())
+        assert len(profile_code) == 64  # 32 bytes = 64 hex chars
+        assert all(c in "0123456789abcdef" for c in profile_code.lower())
 
     def test_profile_code_parsing(self):
         """Test parsing of individual profile code components."""
@@ -250,36 +267,40 @@ class TestRealDeviceDataIntegrity:
 class TestErrorConditions:
     """Test error handling with malformed real-world data."""
 
-    def test_truncated_code_values(self):
+    @pytest.mark.parametrize(
+        "code",
+        SAMPLE_CODE_VALUES,
+    )
+    def test_truncated_code_values(self, code):
         """Test handling of truncated code values."""
         # Test with shortened versions of real codes
-        truncated_codes = [code[:20] for code in SAMPLE_CODE_VALUES[:3]]
+        truncated_codes = code[:20]
 
-        for code in truncated_codes:
-            # Should handle gracefully without crashing
-            try:
-                if len(code) >= 12:
-                    group_code = code[10:12]
-                    assert len(group_code) <= 2
-            except IndexError:
-                pass  # Expected for very short codes
+        # Should handle gracefully without crashing
+        try:
+            if len(truncated_codes) >= 12:
+                group_code = truncated_codes[10:12]
+                assert len(group_code) <= 2
+        except IndexError:
+            pass  # Expected for very short codes
 
-    def test_invalid_hex_characters(self):
-        """Test handling of invalid hex characters in codes."""
-        # Create codes with invalid characters based on real patterns
-        invalid_codes = [
+    @pytest.mark.parametrize(
+        "code",
+        [
             "gggggggggggggggggggg0202008000",  # Invalid hex chars
             "ffffffffffffffffffff02G2008000",  # Single invalid char
-        ]
-
-        for code in invalid_codes:
-            # Should detect invalid hex gracefully
-            try:
-                # This would fail on invalid hex
-                bytes.fromhex(code)
-                assert False, "Should have failed on invalid hex"
-            except ValueError:
-                pass  # Expected
+        ],
+    )
+    def test_invalid_hex_characters(self, code):
+        """Test handling of invalid hex characters in codes."""
+        # Create codes with invalid characters based on real patterns
+        # Should detect invalid hex gracefully
+        try:
+            # This would fail on invalid hex
+            bytes.fromhex(code)
+            assert False, "Should have failed on invalid hex"
+        except ValueError:
+            pass  # Expected
 
 
 if __name__ == "__main__":

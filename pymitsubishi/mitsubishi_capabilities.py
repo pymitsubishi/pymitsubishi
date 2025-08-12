@@ -15,7 +15,7 @@ from typing import Any
 import xml.etree.ElementTree as ET
 
 from .mitsubishi_api import MitsubishiAPI
-from .mitsubishi_parser import PowerOnOff, parse_code_values
+from .mitsubishi_parser import ParsedDeviceState, PowerOnOff
 
 logger = logging.getLogger(__name__)
 
@@ -292,7 +292,7 @@ class CapabilityDetector:
                             continue
 
                 # Parse the codes to understand current state and capabilities
-                parsed_state = parse_code_values(code_values)
+                parsed_state = ParsedDeviceState.parse_code_values(code_values)
                 if parsed_state:
                     self._analyze_parsed_state(parsed_state)
 

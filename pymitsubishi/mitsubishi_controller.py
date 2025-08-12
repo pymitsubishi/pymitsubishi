@@ -20,9 +20,6 @@ from .mitsubishi_parser import (
     PowerOnOff,
     VerticalWindDirection,
     WindSpeed,
-    generate_extend08_command,
-    generate_general_command,
-    parse_code_values,
 )
 
 logger = logging.getLogger(__name__)
@@ -65,7 +62,7 @@ class MitsubishiController:
             code_values = [elem.text for elem in code_values_elems if elem.text]
 
             # Use the parser module to get structured state
-            parsed_state = parse_code_values(code_values)
+            parsed_state = ParsedDeviceState.parse_code_values(code_values)
 
             if parsed_state:
                 self.state = parsed_state
@@ -285,7 +282,7 @@ class MitsubishiController:
     def _send_general_control_command(self, state: GeneralStates, controls: dict[str, bool]) -> bool:
         """Send a general control command to the device"""
         # Generate the hex command
-        hex_command = generate_general_command(state, controls)
+        hex_command = state.generate_general_command(controls)
 
         logger.debug(f"🔧 Sending command: {hex_command}")
 
@@ -303,7 +300,7 @@ class MitsubishiController:
     def _send_extend08_command(self, state: GeneralStates, controls: dict[str, bool]) -> bool:
         """Send an extend08 command for advanced features"""
         # Generate the hex command
-        hex_command = generate_extend08_command(state, controls)
+        hex_command = state.generate_extend08_command(controls)
 
         logger.debug(f"🔧 Sending extend08 command: {hex_command}")
 

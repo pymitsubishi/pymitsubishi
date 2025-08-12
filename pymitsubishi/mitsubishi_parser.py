@@ -612,7 +612,7 @@ class ErrorStates:
         try:
             code_head = payload[18:20]
             code_tail = payload[20:22]
-            is_abnormal_state = not (code_head == "80" and code_tail == "00")
+            is_abnormal_state = not (code_head in ("00", "80") and code_tail == "00")
             error_code = f"{code_head}{code_tail}"
 
             return ErrorStates(

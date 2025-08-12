@@ -55,10 +55,10 @@ api.close()
 ### Capability Detection
 
 ```python
-from pymitsubishi import CapabilityDetector
+from pymitsubishi import CapabilityDetector, CapabilityType
 
 detector = CapabilityDetector(api=api)
-capabilities = detector.detect_all_capabilities(debug=True)
+capabilities = detector.detect_all_capabilities()
 
 # Check specific capabilities
 if capabilities.has_capability(CapabilityType.OUTDOOR_TEMPERATURE_SENSOR):

@@ -727,7 +727,7 @@ class ParsedDeviceState:
 
 def calc_fcc(payload: bytes) -> int:
     """Calculate FCC checksum for Mitsubishi protocol payload"""
-    return 0x100 - (sum(payload[0:20]) % 0x100)  # TODO: do we actually need to limit this to 20 bytes?
+    return (0x100 - (sum(payload[0:20]) % 0x100)) % 0x100  # TODO: do we actually need to limit this to 20 bytes?
 
 
 def convert_temperature(temperature: int) -> str:

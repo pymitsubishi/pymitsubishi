@@ -137,7 +137,8 @@ class GeneralStates:
 
     power_on_off: PowerOnOff = PowerOnOff.OFF
     drive_mode: DriveMode = DriveMode.AUTO
-    temperature: int = 220  # 22.0°C in 0.1°C units
+    coarse_temperature: int = 220  # 22.0°C in 0.1°C units
+    fine_temperature: int | None = 220
     wind_speed: WindSpeed = WindSpeed.AUTO
     vertical_wind_direction_right: VerticalWindDirection = VerticalWindDirection.AUTO
     vertical_wind_direction_left: VerticalWindDirection = VerticalWindDirection.AUTO
@@ -149,15 +150,27 @@ class GeneralStates:
     i_see_sensor: bool = False  # i-See sensor active flag
     mode_raw_value: int = 0  # Raw mode value before i-See processing
     wide_vane_adjustment: bool = False  # Wide vane adjustment flag (SwiCago wideVaneAdj)
-    temp_mode: bool = False  # Direct temperature mode flag (SwiCago tempMode)
-    undocumented_flags: dict[str, Any] | None = None  # Store unknown bit patterns for analysis
+
+    _unknown_6_7: bytes = b"\0\0"
+    _unknown_13_14: bytes = b"\0"
+    _unknown_21_: bytes = b""
+
+    @property
+    def temperature(self) -> int:
+        if self.fine_temperature is not None:
+            return self.fine_temperature
+        return self.coarse_temperature
+
+    @property
+    def temp_mode(self) -> bool:
+        return self.fine_temperature is not None
 
     @staticmethod
     def is_general_states_payload(data: bytes) -> bool:
         """Check if payload contains general states data"""
         if len(data) < 6:
             return False
-        return data[1] in [0x62, 0x7b] and data[5] == 0x02
+        return data[1] in [0x62, 0x7B] and data[5] == 0x02
 
     @classmethod
     def parse_general_states(cls, data: bytes) -> GeneralStates:
@@ -169,82 +182,68 @@ class GeneralStates:
         - i-See sensor detection from mode byte
         """
         logger.debug(f"Parsing general states payload: {data.hex()}")
+
         if len(data) < 21:
             raise ValueError("GeneralStates payload too short")
 
-        power_on_off = PowerOnOff.get_on_off_status(format(data[8], "02x"))
+        if data[0] != 0xFC:
+            raise ValueError(f"GeneralStates[0] == 0x{data[0]:02x} != 0xfc")
 
-        # Enhanced temperature parsing (SwiCago logic)
-        # Check for direct temperature mode first (data[11] != 0x00)
-        temp_mode = False
-        temperature = 220  # Default to 22.0°C
+        calculated_fcc = calc_fcc(data[1:-1])
+        if calculated_fcc != data[-1]:
+            raise ValueError(f"Invalid checksum, expected 0x{calculated_fcc:02x}, received 0x{data[-1]:02x}")
 
-        # Our payload structure starts with 'fc62013010' (5 bytes) then data begins
-        # So data[0] is at position 10-11, data[1] at 12-13, etc.
-        # data[5] (temp segment) would be at position 20-21
-        # data[11] (direct temp) would be at position 32-33
+        # Verify for parts that we think are static:
+        if data[1] != 0x62 and data[1] != 0x7B:
+            logger.warning(f"GeneralStates[1] == 0x{data[1]:02x} != (0x62 or 0x7b)")
+        if data[2] != 0x01:
+            logger.warning(f"GeneralStates[2] == 0x{data[2]:02x} != 0x01")
+        if data[3] != 0x30:
+            logger.warning(f"GeneralStates[3] == 0x{data[3]:02x} != 0x30")
+        if data[4] != 0x10:
+            logger.warning(f"GeneralStates[4] == 0x{data[4]:02x} != 0x10")
+        if data[5] != 0x02:
+            raise ValueError(f"Not GeneralStates message: data[5] == 0x{data[5]:02x} != 0x02")
 
-        if len(data) > 16:  # Check if we have data[11] position (32-33)
-            temp_direct_raw = data[16]  # data[11] in SwiCago
-            if temp_direct_raw != 0x00:
-                # Direct temperature mode (SwiCago tempMode = true)
-                temp_mode = True
-                temp_celsius = (temp_direct_raw - 128) / 2.0
-                temperature = int(temp_celsius * 10)  # Convert to 0.1°C units
-            else:
-                # Segment-based temperature (SwiCago tempMode = false)
-                temp_mode = False
-                if len(data) > 10:  # Check if we have data[5] position (20-21)
-                    temperature = get_normalized_temperature(data[10])  # data[5] in SwiCago
-        elif len(data) > 10:  # Fallback to segment-based parsing if we don't have data[11]
-            temperature = get_normalized_temperature(data[10])
+        obj = cls.__new__(cls)
+        obj._unknown_6_7 = data[6:8]
+        obj.power_on_off = PowerOnOff.get_on_off_status(format(data[8], "02x"))
 
         # Enhanced mode parsing with i-See sensor detection
         mode_byte = data[9]  # data[4] in SwiCago
-        drive_mode, i_see_active, raw_mode = cls.parse_mode_with_i_see(mode_byte)
+        obj.drive_mode, obj.i_see_active, obj.raw_mode = cls.parse_mode_with_i_see(mode_byte)
 
-        wind_speed = WindSpeed.get_wind_speed(format(data[11], "02x"))  # data[6] in SwiCago
-        right_vertical_wind_direction = VerticalWindDirection.get_vertical_wind_direction(
+        obj.coarse_temperature = (31 - data[10]) * 10
+        obj.wind_speed = WindSpeed.get_wind_speed(format(data[11], "02x"))  # data[6] in SwiCago
+        obj.vertical_wind_direction_right = VerticalWindDirection.get_vertical_wind_direction(
             format(data[12], "02x")
         )  # data[7] in SwiCago
-        left_vertical_wind_direction = VerticalWindDirection.get_vertical_wind_direction(
-            format(data[20], "02x"))
+
+        obj._unknown_13_14 = data[13:15]
 
         # Enhanced wide vane parsing with adjustment flag (SwiCago)
-        wide_vane_data = data[15] if len(data) > 15 else 0  # data[10] in SwiCago
-        horizontal_wind_direction = HorizontalWindDirection.get_horizontal_wind_direction(
+        wide_vane_data = data[15]  # data[10] in SwiCago
+        obj.horizontal_wind_direction = HorizontalWindDirection.get_horizontal_wind_direction(
             f"{wide_vane_data & 0x0F:02x}"
         )  # Lower 4 bits
-        wide_vane_adjustment = (wide_vane_data & 0xF0) == 0x80  # Upper 4 bits = 0x80
+        obj.wide_vane_adjustment = (wide_vane_data & 0xF0) == 0x80  # Upper 4 bits = 0x80
+
+        if data[16] != 0x00:
+            obj.fine_temperature = int((data[16] - 0x80) / 2) * 10
+        else:
+            obj.fine_temperature = None
 
         # Extra states
-        dehum_setting = data[17] if len(data) > 17 else 0
-        is_power_saving = data[18] > 0 if len(data) > 18 else False
-        wind_and_wind_break_direct = data[19] if len(data) > 19 else 0
+        obj.dehum_setting = data[17]
+        obj.is_power_saving = data[18] > 0
+        obj.wind_and_wind_break_direct = data[19]
 
-        # Analyze undocumented bits for research purposes
-        undocumented_analysis = cls.analyze_undocumented_bits(data.hex())
+        obj.vertical_wind_direction_left = VerticalWindDirection.get_vertical_wind_direction(format(data[20], "02x"))
 
-        return GeneralStates(
-            power_on_off=power_on_off,
-            temperature=temperature,
-            drive_mode=drive_mode,
-            wind_speed=wind_speed,
-            vertical_wind_direction_right=right_vertical_wind_direction,
-            vertical_wind_direction_left=left_vertical_wind_direction,
-            horizontal_wind_direction=horizontal_wind_direction,
-            dehum_setting=dehum_setting,
-            is_power_saving=is_power_saving,
-            wind_and_wind_break_direct=wind_and_wind_break_direct,
-            # Enhanced functionality based on SwiCago
-            i_see_sensor=i_see_active,
-            mode_raw_value=raw_mode,
-            wide_vane_adjustment=wide_vane_adjustment,
-            temp_mode=temp_mode,
-            undocumented_flags=undocumented_analysis
-            if undocumented_analysis.get("suspicious_patterns") or undocumented_analysis.get("unknown_segments")
-            else None,
-        )
+        if len(data) > 21:
+            obj._unknown_21_ = data[21:-1]  # don't include the FCC
+
+        return obj
 
     @staticmethod
     def parse_mode_with_i_see(mode_byte: int) -> tuple[DriveMode, bool, int]:
@@ -676,9 +675,6 @@ class ParsedDeviceState:
                 "mode_raw_value": self.general.mode_raw_value,
             }
             result["general_states"] = general_dict
-            # Include undocumented flags analysis if present
-            if self.general.undocumented_flags:
-                result["general_states"]["undocumented_analysis"] = self.general.undocumented_flags
 
         if self.sensors:
             sensor_dict: dict[str, Any] = {

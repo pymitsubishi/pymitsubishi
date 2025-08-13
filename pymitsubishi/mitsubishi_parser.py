@@ -589,27 +589,25 @@ class ErrorStates:
     error_code: str = "8000"
 
     @staticmethod
-    def is_error_states_payload(payload: str) -> bool:
+    def is_error_states_payload(data: bytes) -> bool:
         """Check if payload contains error states data"""
-        if len(payload) < 12:
+        if len(data) < 6:
             return False
-        return payload[2:4] in ["62", "7b"] and payload[10:12] == "04"
+        return data[1] in [0x62, 0x7b] and data[5] == 0x04
 
     @classmethod
-    def parse_error_states(cls, payload: str) -> ErrorStates:
+    def parse_error_states(cls, data: bytes) -> ErrorStates:
         """Parse error states from hex payload"""
-        logger.debug(f"Parsing error states payload: {payload}")
-        if len(payload) < 22:
+        logger.debug(f"Parsing error states payload: {data.hex()}")
+        if len(data) < 11:
             raise ValueError("ErrorStates payload too short")
 
-        code_head = payload[18:20]
-        code_tail = payload[20:22]
-        is_abnormal_state = not (code_head == "80" and code_tail == "00")
-        error_code = f"{code_head}{code_tail}"
+        error_code = int.from_bytes(data[9:11], "big")
+        is_abnormal_state = (error_code != 0x8000)
 
         return ErrorStates(
             is_abnormal_state=is_abnormal_state,
-            error_code=error_code,
+            error_code=format(error_code, "04x"),
         )
 
 
@@ -647,8 +645,8 @@ class ParsedDeviceState:
                 parsed_state.general = GeneralStates.parse_general_states(value)
             elif SensorStates.is_sensor_states_payload(value):
                 parsed_state.sensors = SensorStates.parse_sensor_states(value)
-            elif ErrorStates.is_error_states_payload(hex_lower):
-                parsed_state.errors = ErrorStates.parse_error_states(hex_lower)
+            elif ErrorStates.is_error_states_payload(value):
+                parsed_state.errors = ErrorStates.parse_error_states(value)
             elif EnergyStates.is_energy_states_payload(value):
                 # Parse energy states with context from general states if available
                 parsed_state.energy = EnergyStates.parse_energy_states(value, parsed_state.general)

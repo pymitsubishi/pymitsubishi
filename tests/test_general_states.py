@@ -17,7 +17,7 @@ from pymitsubishi import DriveMode, GeneralStates, HorizontalWindDirection, Powe
     ],
 )
 def test_parse_general_states_mode(data_hex, power, mode):
-    states = GeneralStates.parse_general_states(data_hex)
+    states = GeneralStates.parse_general_states(bytes.fromhex(data_hex))
     assert states.power_on_off == power
     assert states.drive_mode == mode
 
@@ -30,7 +30,7 @@ def test_parse_general_states_mode(data_hex, power, mode):
     ],
 )
 def test_parse_general_states_temp(data_hex, temp):
-    states = GeneralStates.parse_general_states(data_hex)
+    states = GeneralStates.parse_general_states(bytes.fromhex(data_hex))
     assert states.temperature == temp * 10
 
 
@@ -47,7 +47,7 @@ def test_parse_general_states_temp(data_hex, temp):
     ],
 )
 def test_parse_general_states_wind_speed(data_hex, wind_speed):
-    states = GeneralStates.parse_general_states(data_hex)
+    states = GeneralStates.parse_general_states(bytes.fromhex(data_hex))
     assert states.wind_speed.value == wind_speed
 
 
@@ -70,7 +70,7 @@ def test_parse_general_states_wind_speed(data_hex, wind_speed):
     ],
 )
 def test_parse_general_states_vertical_vane(data_hex, v_vane_l: VerticalWindDirection, v_vane_r: VerticalWindDirection):
-    states = GeneralStates.parse_general_states(data_hex)
+    states = GeneralStates.parse_general_states(bytes.fromhex(data_hex))
 
     # My system has a left & right vertical vane, but I can't find the bits to see them separately
     # The "right" vane bits seem to report the "highest" one
@@ -97,7 +97,7 @@ def test_parse_general_states_vertical_vane(data_hex, v_vane_l: VerticalWindDire
     ],
 )
 def test_parse_general_states_horizontal_vane(data_hex, vane):
-    states = GeneralStates.parse_general_states(data_hex)
+    states = GeneralStates.parse_general_states(bytes.fromhex(data_hex))
     assert states.horizontal_wind_direction == vane
 
 
@@ -111,6 +111,6 @@ def test_parse_general_states_horizontal_vane(data_hex, vane):
     ],
 )
 def test_parse_general_states_h_vane_isee(data_hex, h_vane, isee_h_vane):
-    states = GeneralStates.parse_general_states(data_hex)
+    states = GeneralStates.parse_general_states(bytes.fromhex(data_hex))
     assert states.horizontal_wind_direction == h_vane
     assert states.wind_and_wind_break_direct == isee_h_vane

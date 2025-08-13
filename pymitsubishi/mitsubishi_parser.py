@@ -153,14 +153,14 @@ class GeneralStates:
     undocumented_flags: dict[str, Any] | None = None  # Store unknown bit patterns for analysis
 
     @staticmethod
-    def is_general_states_payload(payload: str) -> bool:
+    def is_general_states_payload(data: bytes) -> bool:
         """Check if payload contains general states data"""
-        if len(payload) < 12:
+        if len(data) < 6:
             return False
-        return payload[2:4] in ["62", "7b"] and payload[10:12] == "02"
+        return data[1] in [0x62, 0x7b] and data[5] == 0x02
 
     @classmethod
-    def parse_general_states(cls, payload: str) -> GeneralStates:
+    def parse_general_states(cls, data: bytes) -> GeneralStates:
         """Parse general states from hex payload with enhanced SwiCago-based parsing
 
         Enhanced with SwiCago insights:
@@ -168,11 +168,11 @@ class GeneralStates:
         - Wide vane adjustment flag detection
         - i-See sensor detection from mode byte
         """
-        logger.debug(f"Parsing general states payload: {payload}")
-        if len(payload) < 42:
+        logger.debug(f"Parsing general states payload: {data.hex()}")
+        if len(data) < 21:
             raise ValueError("GeneralStates payload too short")
 
-        power_on_off = PowerOnOff.get_on_off_status(payload[16:18])
+        power_on_off = PowerOnOff.get_on_off_status(format(data[8], "02x"))
 
         # Enhanced temperature parsing (SwiCago logic)
         # Check for direct temperature mode first (data[11] != 0x00)
@@ -184,8 +184,8 @@ class GeneralStates:
         # data[5] (temp segment) would be at position 20-21
         # data[11] (direct temp) would be at position 32-33
 
-        if len(payload) > 33:  # Check if we have data[11] position (32-33)
-            temp_direct_raw = int(payload[32:34], 16)  # data[11] in SwiCago
+        if len(data) > 16:  # Check if we have data[11] position (32-33)
+            temp_direct_raw = data[16]  # data[11] in SwiCago
             if temp_direct_raw != 0x00:
                 # Direct temperature mode (SwiCago tempMode = true)
                 temp_mode = True
@@ -194,35 +194,36 @@ class GeneralStates:
             else:
                 # Segment-based temperature (SwiCago tempMode = false)
                 temp_mode = False
-                if len(payload) > 21:  # Check if we have data[5] position (20-21)
-                    temperature = get_normalized_temperature(int(payload[20:22], 16))  # data[5] in SwiCago
-        elif len(payload) > 21:  # Fallback to segment-based parsing if we don't have data[11]
-            temperature = get_normalized_temperature(int(payload[20:22], 16))
+                if len(data) > 10:  # Check if we have data[5] position (20-21)
+                    temperature = get_normalized_temperature(data[10])  # data[5] in SwiCago
+        elif len(data) > 10:  # Fallback to segment-based parsing if we don't have data[11]
+            temperature = get_normalized_temperature(data[10])
 
         # Enhanced mode parsing with i-See sensor detection
-        mode_byte = int(payload[18:20], 16)  # data[4] in SwiCago
+        mode_byte = data[9]  # data[4] in SwiCago
         drive_mode, i_see_active, raw_mode = cls.parse_mode_with_i_see(mode_byte)
 
-        wind_speed = WindSpeed.get_wind_speed(payload[22:24])  # data[6] in SwiCago
+        wind_speed = WindSpeed.get_wind_speed(format(data[11], "02x"))  # data[6] in SwiCago
         right_vertical_wind_direction = VerticalWindDirection.get_vertical_wind_direction(
-            payload[24:26]
+            format(data[12], "02x")
         )  # data[7] in SwiCago
-        left_vertical_wind_direction = VerticalWindDirection.get_vertical_wind_direction(payload[40:42])
+        left_vertical_wind_direction = VerticalWindDirection.get_vertical_wind_direction(
+            format(data[20], "02x"))
 
         # Enhanced wide vane parsing with adjustment flag (SwiCago)
-        wide_vane_data = int(payload[30:32], 16) if len(payload) > 31 else 0  # data[10] in SwiCago
+        wide_vane_data = data[15] if len(data) > 15 else 0  # data[10] in SwiCago
         horizontal_wind_direction = HorizontalWindDirection.get_horizontal_wind_direction(
             f"{wide_vane_data & 0x0F:02x}"
         )  # Lower 4 bits
         wide_vane_adjustment = (wide_vane_data & 0xF0) == 0x80  # Upper 4 bits = 0x80
 
         # Extra states
-        dehum_setting = int(payload[34:36], 16) if len(payload) > 35 else 0
-        is_power_saving = int(payload[36:38], 16) > 0 if len(payload) > 37 else False
-        wind_and_wind_break_direct = int(payload[38:40], 16) if len(payload) > 39 else 0
+        dehum_setting = data[17] if len(data) > 17 else 0
+        is_power_saving = data[18] > 0 if len(data) > 18 else False
+        wind_and_wind_break_direct = data[19] if len(data) > 19 else 0
 
         # Analyze undocumented bits for research purposes
-        undocumented_analysis = cls.analyze_undocumented_bits(payload)
+        undocumented_analysis = cls.analyze_undocumented_bits(data.hex())
 
         return GeneralStates(
             power_on_off=power_on_off,
@@ -632,6 +633,8 @@ class ParsedDeviceState:
         logger.debug(f"Parsing {len(code_values)} code values")
 
         for hex_value in code_values:
+            value = bytes.fromhex(hex_value)
+
             if not hex_value or len(hex_value) < 20:
                 continue
 
@@ -640,8 +643,8 @@ class ParsedDeviceState:
                 continue
 
             # Parse different payload types
-            if GeneralStates.is_general_states_payload(hex_lower):
-                parsed_state.general = GeneralStates.parse_general_states(hex_lower)
+            if GeneralStates.is_general_states_payload(value):
+                parsed_state.general = GeneralStates.parse_general_states(value)
             elif SensorStates.is_sensor_states_payload(hex_lower):
                 parsed_state.sensors = SensorStates.parse_sensor_states(hex_lower)
             elif ErrorStates.is_error_states_payload(hex_lower):

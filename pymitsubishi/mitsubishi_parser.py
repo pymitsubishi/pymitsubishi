@@ -484,14 +484,14 @@ class EnergyStates:
     estimated_power_watts: float | None = None  # Estimated power consumption in Watts
 
     @staticmethod
-    def is_energy_states_payload(payload: str) -> bool:
+    def is_energy_states_payload(data: bytes) -> bool:
         """Check if payload contains energy/status data (SwiCago group 06)"""
-        if len(payload) < 12:
+        if len(data) < 6:
             return False
-        return payload[2:4] in ["62", "7b"] and payload[10:12] == "06"
+        return data[1] in [0x62, 0x7b] and data[5] == 0x06
 
     @classmethod
-    def parse_energy_states(cls, payload: str, general_states: GeneralStates | None = None) -> EnergyStates:
+    def parse_energy_states(cls, data: bytes, general_states: GeneralStates | None = None) -> EnergyStates:
         """Parse energy/status states from hex payload (SwiCago group 06)
 
         Based on SwiCago implementation:
@@ -499,18 +499,18 @@ class EnergyStates:
         - data[4] = operating status (boolean)
 
         Args:
-            payload: Hex payload string
+            data: payload as bytes
             general_states: Optional general states for power estimation context
         """
-        logger.debug(f"Parsing energy states payload: {payload}")
-        if len(payload) < 24:  # Need at least enough bytes for data[4]
+        logger.debug(f"Parsing energy states payload: {data.hex()}")
+        if len(data) < 12:  # Need at least enough bytes for data[4]
             raise ValueError("EnergyStates payload too short")
 
         # Extract compressor frequency from data[3] (position 18-19 in hex string)
-        compressor_frequency = int(payload[18:20], 16)
+        compressor_frequency = data[9]
 
         # Extract operating status from data[4] (position 20-21 in hex string)
-        operating = int(payload[20:22], 16) > 0
+        operating = data[10] > 0
 
         # Estimate power consumption if we have context
         estimated_power = None
@@ -649,9 +649,9 @@ class ParsedDeviceState:
                 parsed_state.sensors = SensorStates.parse_sensor_states(value)
             elif ErrorStates.is_error_states_payload(hex_lower):
                 parsed_state.errors = ErrorStates.parse_error_states(hex_lower)
-            elif EnergyStates.is_energy_states_payload(hex_lower):
+            elif EnergyStates.is_energy_states_payload(value):
                 # Parse energy states with context from general states if available
-                parsed_state.energy = EnergyStates.parse_energy_states(hex_lower, parsed_state.general)
+                parsed_state.energy = EnergyStates.parse_energy_states(value, parsed_state.general)
             else:
                 logger.debug(f"Ignoring unknown code value: {hex_value}")
 

@@ -17,7 +17,7 @@ from pymitsubishi import EnergyStates
     ],
 )
 def test_operating(data_hex, this_unit, other_units):
-    state = EnergyStates.parse_energy_states(data_hex)
+    state = EnergyStates.parse_energy_states(bytes.fromhex(data_hex))
     assert state.operating == this_unit
 
 
@@ -32,5 +32,5 @@ def test_operating(data_hex, this_unit, other_units):
     ],
 )
 def test_compressor_frequency(data_hex, freq):
-    state = EnergyStates.parse_energy_states(data_hex)
+    state = EnergyStates.parse_energy_states(bytes.fromhex(data_hex))
     assert state.compressor_frequency == freq

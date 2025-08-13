@@ -446,12 +446,17 @@ class SensorStates:
     thermal_sensor: bool = False
     wind_speed_pr557: int = 0
 
+    _unknown_6_9: bytes = b"\0\0\0\0"
+    _unknown_11: bytes = b"\0"
+    _unknown_13_18: bytes = b"\0\0\0\0\0\0"
+    _unknown_21_: bytes = b""
+
     @staticmethod
     def is_sensor_states_payload(data: bytes) -> bool:
         """Check if payload contains sensor states data"""
         if len(data) < 6:
             return False
-        return data[1] in [0x62, 0x7b] and data[5] == 0x03
+        return data[1] in [0x62, 0x7B] and data[5] == 0x03
 
     @classmethod
     def parse_sensor_states(cls, data: bytes) -> SensorStates:
@@ -460,18 +465,43 @@ class SensorStates:
         if len(data) < 21:
             raise ValueError("SensorStates payload too short")
 
-        outside_temp_raw = data[10]
-        outside_temperature = None if outside_temp_raw < 16 else get_normalized_temperature(outside_temp_raw)
-        room_temperature = get_normalized_temperature(data[12])
-        thermal_sensor = (data[19] & 0x01) != 0
-        wind_speed_pr557 = 1 if (data[20] & 0x01) == 1 else 0
+        if data[0] != 0xFC:
+            raise ValueError(f"SensorStates[0] == 0x{data[0]:02x} != 0xfc")
 
-        return SensorStates(
-            outside_temperature=outside_temperature,
-            room_temperature=room_temperature,
-            thermal_sensor=thermal_sensor,
-            wind_speed_pr557=wind_speed_pr557,
-        )
+        calculated_fcc = calc_fcc(data[1:-1])
+        if calculated_fcc != data[-1]:
+            raise ValueError(f"Invalid checksum, expected 0x{calculated_fcc:02x}, received 0x{data[-1]:02x}")
+
+        # Verify for parts that we think are static:
+        if data[1] != 0x62 and data[1] != 0x7B:
+            logger.warning(f"SensorStates[1] == 0x{data[1]:02x} != (0x62 or 0x7b)")
+        if data[2] != 0x01:
+            logger.warning(f"SensorStates[2] == 0x{data[2]:02x} != 0x01")
+        if data[3] != 0x30:
+            logger.warning(f"SensorStates[3] == 0x{data[3]:02x} != 0x30")
+        if data[4] != 0x10:
+            logger.warning(f"SensorStates[4] == 0x{data[4]:02x} != 0x10")
+        if data[5] != 0x03:
+            raise ValueError(f"Not SensorStates message: data[5] == 0x{data[5]:02x} != 0x03")
+
+        obj = cls.__new__(cls)
+        obj._unknown_6_9 = data[6:10]
+
+        outside_temp_raw = data[10]
+        obj._unknown_11 = data[11:12]
+
+        obj.outside_temperature = None if outside_temp_raw < 16 else get_normalized_temperature(outside_temp_raw)
+        obj.room_temperature = get_normalized_temperature(data[12])
+
+        obj._unknown_13_18 = data[13:19]
+
+        obj.thermal_sensor = (data[19] & 0x01) != 0
+        obj.wind_speed_pr557 = 1 if (data[20] & 0x01) == 1 else 0
+
+        if len(data) > 21:
+            obj._unknown_21_ = data[21:-1]
+
+        return obj
 
 
 @dataclass

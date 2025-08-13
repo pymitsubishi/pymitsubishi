@@ -633,13 +633,6 @@ class ParsedDeviceState:
         for hex_value in code_values:
             value = bytes.fromhex(hex_value)
 
-            if not hex_value or len(hex_value) < 20:
-                continue
-
-            hex_lower = hex_value.lower()
-            if not all(c in "0123456789abcdef" for c in hex_lower):
-                continue
-
             # Parse different payload types
             if GeneralStates.is_general_states_payload(value):
                 parsed_state.general = GeneralStates.parse_general_states(value)
@@ -651,7 +644,7 @@ class ParsedDeviceState:
                 # Parse energy states with context from general states if available
                 parsed_state.energy = EnergyStates.parse_energy_states(value, parsed_state.general)
             else:
-                logger.debug(f"Ignoring unknown code value: {hex_value}")
+                logger.debug(f"Ignoring unknown code value: {value.hex()}")
 
         return parsed_state
 

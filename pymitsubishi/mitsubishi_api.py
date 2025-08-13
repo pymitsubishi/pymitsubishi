@@ -49,7 +49,7 @@ class MitsubishiAPI:
         self.session = requests.Session()
 
         # Add retry logic with backoff for better reliability
-        retries = Retry(total=2, backoff_factor=1)
+        retries = Retry(total=4, backoff_factor=1)
         self.session.mount("http://", HTTPAdapter(max_retries=retries))
 
     def get_crypto_key(self) -> bytes:
@@ -177,6 +177,9 @@ class MitsubishiAPI:
         except requests.exceptions.RequestException as e:
             logger.error(f"Request error: {e}")
             return None
+
+    def send_reboot_request(self) -> str | None:
+        return self.make_request("<CSV><RESET></RESET></CSV>")
 
     def send_status_request(self) -> str | None:
         """Send a status request to get current device state"""

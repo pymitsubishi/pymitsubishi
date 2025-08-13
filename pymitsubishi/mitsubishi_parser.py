@@ -15,10 +15,6 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Temperature constants
-MIN_TEMPERATURE = 160  # 16.0°C in 0.1°C units
-MAX_TEMPERATURE = 310  # 31.0°C in 0.1°C units
-
 
 class PowerOnOff(Enum):
     OFF = "00"
@@ -137,11 +133,10 @@ class GeneralStates:
 
     power_on_off: PowerOnOff = PowerOnOff.OFF
     drive_mode: DriveMode = DriveMode.AUTO
-    coarse_temperature: int = 220  # 22.0°C in 0.1°C units
-    fine_temperature: int | None = 220
+    coarse_temperature: int = 22
+    fine_temperature: float | None = 22.0
     wind_speed: WindSpeed = WindSpeed.AUTO
-    vertical_wind_direction_right: VerticalWindDirection = VerticalWindDirection.AUTO
-    vertical_wind_direction_left: VerticalWindDirection = VerticalWindDirection.AUTO
+    vertical_wind_direction: VerticalWindDirection = VerticalWindDirection.AUTO
     horizontal_wind_direction: HorizontalWindDirection = HorizontalWindDirection.AUTO
     dehum_setting: int = 0
     is_power_saving: bool = False
@@ -151,12 +146,12 @@ class GeneralStates:
     mode_raw_value: int = 0  # Raw mode value before i-See processing
     wide_vane_adjustment: bool = False  # Wide vane adjustment flag (SwiCago wideVaneAdj)
 
-    _unknown_6_7: bytes = b"\0\0"
-    _unknown_13_14: bytes = b"\0"
-    _unknown_21_: bytes = b""
+    unknown_6_7: bytes = b"\0\0"
+    unknown_13_14: bytes = b"\0\0"
+    unknown_20_: bytes = b""
 
     @property
-    def temperature(self) -> int:
+    def temperature(self) -> float:
         if self.fine_temperature is not None:
             return self.fine_temperature
         return self.coarse_temperature
@@ -206,20 +201,20 @@ class GeneralStates:
             raise ValueError(f"Not GeneralStates message: data[5] == 0x{data[5]:02x} != 0x02")
 
         obj = cls.__new__(cls)
-        obj._unknown_6_7 = data[6:8]
+        obj.unknown_6_7 = data[6:8]
         obj.power_on_off = PowerOnOff.get_on_off_status(format(data[8], "02x"))
 
         # Enhanced mode parsing with i-See sensor detection
         mode_byte = data[9]  # data[4] in SwiCago
         obj.drive_mode, obj.i_see_active, obj.raw_mode = cls.parse_mode_with_i_see(mode_byte)
 
-        obj.coarse_temperature = (31 - data[10]) * 10
+        obj.coarse_temperature = 31 - data[10]
         obj.wind_speed = WindSpeed.get_wind_speed(format(data[11], "02x"))  # data[6] in SwiCago
-        obj.vertical_wind_direction_right = VerticalWindDirection.get_vertical_wind_direction(
+        obj.vertical_wind_direction = VerticalWindDirection.get_vertical_wind_direction(
             format(data[12], "02x")
         )  # data[7] in SwiCago
 
-        obj._unknown_13_14 = data[13:15]
+        obj.unknown_13_14 = data[13:15]
 
         # Enhanced wide vane parsing with adjustment flag (SwiCago)
         wide_vane_data = data[15]  # data[10] in SwiCago
@@ -229,7 +224,7 @@ class GeneralStates:
         obj.wide_vane_adjustment = (wide_vane_data & 0xF0) == 0x80  # Upper 4 bits = 0x80
 
         if data[16] != 0x00:
-            obj.fine_temperature = int((data[16] - 0x80) / 2) * 10
+            obj.fine_temperature = (data[16] - 0x80) / 2
         else:
             obj.fine_temperature = None
 
@@ -238,10 +233,8 @@ class GeneralStates:
         obj.is_power_saving = data[18] > 0
         obj.wind_and_wind_break_direct = data[19]
 
-        obj.vertical_wind_direction_left = VerticalWindDirection.get_vertical_wind_direction(format(data[20], "02x"))
-
-        if len(data) > 21:
-            obj._unknown_21_ = data[21:-1]  # don't include the FCC
+        if len(data) > 20:
+            obj.unknown_20_ = data[20:-1]  # don't include the FCC
 
         return obj
 
@@ -395,7 +388,7 @@ class GeneralStates:
         segments["segment3"] = self.power_on_off.value
         segments["segment4"] = f"{self.drive_mode.value:02x}"  # Convert int to hex string
         segments["segment6"] = f"{self.wind_speed.value:02x}"
-        segments["segment7"] = f"{self.vertical_wind_direction_right.value:02x}"
+        segments["segment7"] = f"{self.vertical_wind_direction.value:02x}"
         segments["segment13"] = f"{self.horizontal_wind_direction.value:02x}"
         segments["segment15"] = "41"  # checkInside: 41 true, 42 false
 
@@ -443,13 +436,14 @@ class SensorStates:
 
     outside_temperature: int | None = None
     room_temperature: int = 220  # 22.0°C in 0.1°C units
-    thermal_sensor: bool = False
-    wind_speed_pr557: int = 0
+    runtime_minutes: int = 0
 
-    _unknown_6_9: bytes = b"\0\0\0\0"
-    _unknown_11: bytes = b"\0"
-    _unknown_13_18: bytes = b"\0\0\0\0\0\0"
-    _unknown_21_: bytes = b""
+    unknown_6_7: bytes = b"\0\0"
+    temperature_8: int = 0
+    unknown_9: bytes = b"\0"
+    temperature_11: float = 0
+    unknown_13_14: bytes = b"\0\0"
+    unknown_21_: bytes = b""
 
     @staticmethod
     def is_sensor_states_payload(data: bytes) -> bool:
@@ -485,21 +479,30 @@ class SensorStates:
             raise ValueError(f"Not SensorStates message: data[5] == 0x{data[5]:02x} != 0x03")
 
         obj = cls.__new__(cls)
-        obj._unknown_6_9 = data[6:10]
+        obj.unknown_6_7 = data[6:8]
+
+        obj.temperature_8 = 10 + data[8]
+
+        obj.unknown_9 = data[9:10]
 
         outside_temp_raw = data[10]
-        obj._unknown_11 = data[11:12]
-
         obj.outside_temperature = None if outside_temp_raw < 16 else get_normalized_temperature(outside_temp_raw)
+
+        obj.temperature_11 = (data[11] - 0x80) * 0.5
         obj.room_temperature = get_normalized_temperature(data[12])
+        # What's the difference between data[8], data[11] and data[12]?
+        # data[8] and data[11] seem to be the exact same value (with different conversion & thus truncation)
+        # but they seem to move exactly together
+        # data[12] moves differently and seems to lead vs data[8]/data[11]
 
-        obj._unknown_13_18 = data[13:19]
+        obj.unknown_13_14 = data[13:15]
 
-        obj.thermal_sensor = (data[19] & 0x01) != 0
-        obj.wind_speed_pr557 = 1 if (data[20] & 0x01) == 1 else 0
+        obj.runtime_minutes = int.from_bytes(data[15:19], 'big', signed=False)
+        # runtime is at least 24 bit long data[16:19]
+        # Since 24 bits is a bit odd, I'm assuming it's 32bit and join in an additional leading 0x00 at data[15]
 
-        if len(data) > 21:
-            obj._unknown_21_ = data[21:-1]
+        if len(data) > 19:
+            obj.unknown_21_ = data[19:-1]
 
         return obj
 
@@ -508,12 +511,10 @@ class SensorStates:
 class EnergyStates:
     """Parsed energy and operational states from device response"""
 
-    compressor_frequency: int | None = None  # Raw compressor frequency value
-    operating: bool = False  # True if heat pump is actively operating
-    estimated_power_watts: float | None = None  # Estimated power consumption in Watts
-
-    _unknown_6_8: bytes = b"\0\0\0"
-    _unknown_11_: bytes = b""
+    unknown_6_8: bytes = b"\0\0\0"
+    operating: int = 0
+    unknown_10_11: int = 0
+    unknown_12_: bytes = b""
 
     @staticmethod
     def is_energy_states_payload(data: bytes) -> bool:
@@ -558,80 +559,24 @@ class EnergyStates:
             raise ValueError(f"Not EnergyStates message: data[5] == 0x{data[5]:02x} != 0x06")
 
         obj = cls.__new__(cls)
-        obj._unknown_6_8 = data[6:9]
+        obj.unknown_6_8 = data[6:9]
 
-        # Extract compressor frequency from data[3] (position 18-19 in hex string)
-        obj.compressor_frequency = data[9]
+        obj.operating = data[9]
 
-        # Extract operating status from data[4] (position 20-21 in hex string)
-        obj.operating = data[10] > 0
+        obj.unknown_10_11 = int.from_bytes(data[10:12], 'big', signed=False)
+        # Looks like power consumption in Watt.
+        # The outdoor unit is reported as part of the first indoor unit (port A)
+        # Doesn't match exactly with my power meter, but it's close.
+        #
+        # Notes below were for data[11] without data[10]
+        # When Off, this seems to go up/down in sync with the crank case heater on one indoor unit per outdoor unit
+        # When on, it doesn't exactly follow the power consumption, but does seem correlated
+        # Something-something pressure?
 
-        if len(data) > 11:
-            obj._unknown_11_ = data[11:-1]
-
-        # Estimate power consumption if we have context
-        obj.estimated_power = None
-        if general_states:
-            obj.estimated_power = cls.estimate_power_consumption(
-                obj.compressor_frequency, general_states.drive_mode, general_states.wind_speed
-            )
+        if len(data) > 12:
+            obj._unknown_11_ = data[12:-1]
 
         return obj
-
-    @staticmethod
-    def estimate_power_consumption(compressor_frequency: int, mode: DriveMode, fan_speed: WindSpeed) -> float:
-        """Estimate power consumption based on compressor frequency and operational parameters
-
-        This is a rough estimation based on empirical data from heat pump literature.
-        Actual consumption varies significantly based on outdoor conditions, efficiency rating, etc.
-
-        Args:
-            compressor_frequency: Raw compressor frequency value (0-255 typical)
-            mode: Operating mode (affects base consumption)
-            fan_speed: Fan speed (affects additional consumption)
-
-        Returns:
-            Estimated power consumption in Watts
-        """
-        if compressor_frequency == 0:
-            # Unit is not actively operating - only standby power
-            return 10.0  # Typical standby consumption
-
-        # Base power estimation from compressor frequency
-        # This is a rough linear approximation - real curves are more complex
-        frequency_factor = compressor_frequency / 255.0  # Normalize to 0-1
-
-        # Mode-based base consumption (typical values for residential units)
-        mode_base_watts = {
-            DriveMode.COOLER: 1200,  # Cooling tends to use more power
-            DriveMode.HEATER: 1000,  # Heating can be more efficient
-            DriveMode.AUTO: 1100,  # Average
-            DriveMode.DEHUM: 800,  # Dehumidification uses less
-            DriveMode.FAN: 50,  # Fan only
-            DriveMode.AUTO_COOLER: 1200,
-            DriveMode.AUTO_HEATER: 1000,
-        }
-
-        base_power = mode_base_watts.get(mode, 1000)
-
-        # Compressor power scales roughly with frequency
-        compressor_power = base_power * frequency_factor
-
-        # Fan power addition
-        fan_power_map = {
-            WindSpeed.AUTO: 50,  # Variable
-            WindSpeed.LEVEL_1: 30,  # Low speed
-            WindSpeed.LEVEL_2: 60,  # Medium-low
-            WindSpeed.LEVEL_3: 90,  # Medium-high
-            WindSpeed.LEVEL_FULL: 120,  # High speed
-        }
-
-        fan_power = fan_power_map.get(fan_speed, 50)
-
-        # Total estimated power
-        total_power = compressor_power + fan_power + 20  # +20W for control electronics
-
-        return round(total_power, 1)
 
 
 @dataclass
@@ -640,8 +585,8 @@ class ErrorStates:
 
     error_code: int = 0x8000
 
-    _unknown_6_8: bytes = b"\0\0\0"
-    _unknown_11_: bytes = b""
+    unknown_6_8: bytes = b"\0\0\0"
+    unknown_11_: bytes = b""
 
     @property
     def is_abnormal_state(self) -> bool:
@@ -681,12 +626,108 @@ class ErrorStates:
             raise ValueError(f"Not ErrorStates message: data[5] == 0x{data[5]:02x} != 0x04")
 
         obj = cls.__new__(cls)
-        obj._unknown_6_8 = data[6:9]
+        obj.unknown_6_8 = data[6:9]
 
         obj.error_code = int.from_bytes(data[9:11], "big")
 
         if len(data) > 11:
-            obj._unknown_11_ = data[11:-1]
+            obj.unknown_11_ = data[11:-1]
+
+        return obj
+
+
+@dataclass
+class Unknown5States:
+    unknown_6_: bytes = b""
+
+    @staticmethod
+    def is_unknown5_states_payload(data: bytes) -> bool:
+        """Check if payload contains error states data"""
+        if len(data) < 6:
+            return False
+        return data[1] in [0x62, 0x7B] and data[5] == 0x05
+
+    @classmethod
+    def parse_unknown5_states(cls, data: bytes) -> Unknown5States:
+        """Parse error states from hex payload"""
+        logger.debug(f"Parsing {cls.__name__} payload: {data.hex()}")
+        if len(data) < 6:
+            raise ValueError(f"{cls.__name__} payload too short")
+
+        if data[0] != 0xFC:
+            raise ValueError(f"{cls.__name__}[0] == 0x{data[0]:02x} != 0xfc")
+
+        calculated_fcc = calc_fcc(data[1:-1])
+        if calculated_fcc != data[-1]:
+            raise ValueError(f"Invalid checksum, expected 0x{calculated_fcc:02x}, received 0x{data[-1]:02x}")
+
+        # Verify for parts that we think are static:
+        if data[1] != 0x62 and data[1] != 0x7B:
+            logger.warning(f"{cls.__name__}[1] == 0x{data[1]:02x} != (0x62 or 0x7b)")
+        if data[2] != 0x01:
+            logger.warning(f"{cls.__name__}[2] == 0x{data[2]:02x} != 0x01")
+        if data[3] != 0x30:
+            logger.warning(f"{cls.__name__}[3] == 0x{data[3]:02x} != 0x30")
+        if data[4] != 0x10:
+            logger.warning(f"{cls.__name__}[4] == 0x{data[4]:02x} != 0x10")
+        if data[5] != 0x05:
+            raise ValueError(f"Not {cls.__name__} message: data[5] == 0x{data[5]:02x} != 0x05")
+
+        obj = cls.__new__(cls)
+        obj.unknown_6_ = data[6:-1]
+
+        return obj
+
+
+@dataclass
+class Unknown9States:
+    unknown_6_8: bytes = b"\0\0\0"
+    unknown_9: int = 0
+    unknown_10_: bytes = b""
+
+    @staticmethod
+    def is_unknown9_states_payload(data: bytes) -> bool:
+        """Check if payload contains error states data"""
+        if len(data) < 6:
+            return False
+        return data[1] in [0x62, 0x7B] and data[5] == 0x09
+
+    @classmethod
+    def parse_unknown9_states(cls, data: bytes) -> Unknown9States:
+        """Parse error states from hex payload"""
+        logger.debug(f"Parsing {cls.__name__} payload: {data.hex()}")
+        if len(data) < 6:
+            raise ValueError(f"{cls.__name__} payload too short")
+
+        if data[0] != 0xFC:
+            raise ValueError(f"{cls.__name__}[0] == 0x{data[0]:02x} != 0xfc")
+
+        calculated_fcc = calc_fcc(data[1:-1])
+        if calculated_fcc != data[-1]:
+            raise ValueError(f"Invalid checksum, expected 0x{calculated_fcc:02x}, received 0x{data[-1]:02x}")
+
+        # Verify for parts that we think are static:
+        if data[1] != 0x62 and data[1] != 0x7B:
+            logger.warning(f"{cls.__name__}[1] == 0x{data[1]:02x} != (0x62 or 0x7b)")
+        if data[2] != 0x01:
+            logger.warning(f"{cls.__name__}[2] == 0x{data[2]:02x} != 0x01")
+        if data[3] != 0x30:
+            logger.warning(f"{cls.__name__}[3] == 0x{data[3]:02x} != 0x30")
+        if data[4] != 0x10:
+            logger.warning(f"{cls.__name__}[4] == 0x{data[4]:02x} != 0x10")
+        if data[5] != 0x09:
+            raise ValueError(f"Not {cls.__name__} message: data[5] == 0x{data[5]:02x} != 0x09")
+
+        obj = cls.__new__(cls)
+        obj.unknown_6_8 = data[6:9]
+
+        obj.unknown_9 = data[9]
+        # This seems demand-related.
+        # It's 0 when off, and goes up to 6 (?)
+        # On but not pumping is 1 (operating in Energy turns to 0 there)
+        # Higher seems to indicate higher demand
+
+        obj.unknown_10_ = data[10:-1]
 
         return obj
 
@@ -703,6 +744,9 @@ class ParsedDeviceState:
     serial: str = ""
     rssi: str = ""
     app_version: str = ""
+
+    _unknown5: Unknown5States | None = None
+    _unknown9: Unknown9States | None = None
 
     @classmethod
     def parse_code_values(cls, code_values: list[str]) -> ParsedDeviceState:
@@ -723,6 +767,10 @@ class ParsedDeviceState:
             elif EnergyStates.is_energy_states_payload(value):
                 # Parse energy states with context from general states if available
                 parsed_state.energy = EnergyStates.parse_energy_states(value, parsed_state.general)
+            elif Unknown5States.is_unknown5_states_payload(value):
+                parsed_state._unknown5 = Unknown5States.parse_unknown5_states(value)
+            elif Unknown9States.is_unknown9_states_payload(value):
+                parsed_state._unknown9 = Unknown9States.parse_unknown9_states(value)
             else:
                 logger.debug(f"Ignoring unknown code value: {value.hex()}")
 
@@ -743,10 +791,9 @@ class ParsedDeviceState:
             general_dict: dict[str, Any] = {
                 "power": "ON" if self.general.power_on_off == PowerOnOff.ON else "OFF",
                 "mode": self.general.drive_mode.name,
-                "target_temperature_celsius": self.general.temperature / 10.0,
+                "target_temperature_celsius": self.general.temperature,
                 "fan_speed": self.general.wind_speed.name,
-                "vertical_wind_direction_right": self.general.vertical_wind_direction_right.name,
-                "vertical_wind_direction_left": self.general.vertical_wind_direction_left.name,
+                "vertical_wind_direction": self.general.vertical_wind_direction.name,
                 "horizontal_wind_direction": self.general.horizontal_wind_direction.name,
                 "dehumidification_setting": self.general.dehum_setting,
                 "power_saving_mode": self.general.is_power_saving,
@@ -777,9 +824,6 @@ class ParsedDeviceState:
 
         if self.energy:
             energy_dict: dict[str, Any] = {
-                "compressor_frequency": self.energy.compressor_frequency,
-                "operating": self.energy.operating,
-                "estimated_power_watts": self.energy.estimated_power_watts,
             }
             result["energy_states"] = energy_dict
 
@@ -793,16 +837,16 @@ def calc_fcc(payload: bytes) -> int:
 
 def convert_temperature(temperature: int) -> str:
     """Convert temperature in 0.1°C units to segment format"""
-    t = max(MIN_TEMPERATURE, min(MAX_TEMPERATURE, temperature))
-    e = 31 - (t // 10)
+    t = max(16, min(31, temperature))
+    e = 31 - int(t)
     last_digit = "0" if str(t)[-1] == "0" else "1"
     return last_digit + format(e, "x")
 
 
 def convert_temperature_to_segment(temperature: int) -> str:
     """Convert temperature to segment 14 format"""
-    value = 0x80 + (temperature // 5)
-    return format(value, "02x")
+    value = 0x80 + (temperature // 0.5)
+    return format(int(value), "02x")
 
 
 def get_normalized_temperature(hex_value: int) -> int:

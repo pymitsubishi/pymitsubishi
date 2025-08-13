@@ -512,12 +512,15 @@ class EnergyStates:
     operating: bool = False  # True if heat pump is actively operating
     estimated_power_watts: float | None = None  # Estimated power consumption in Watts
 
+    _unknown_6_8: bytes = b"\0\0\0"
+    _unknown_11_: bytes = b""
+
     @staticmethod
     def is_energy_states_payload(data: bytes) -> bool:
         """Check if payload contains energy/status data (SwiCago group 06)"""
         if len(data) < 6:
             return False
-        return data[1] in [0x62, 0x7b] and data[5] == 0x06
+        return data[1] in [0x62, 0x7B] and data[5] == 0x06
 
     @classmethod
     def parse_energy_states(cls, data: bytes, general_states: GeneralStates | None = None) -> EnergyStates:
@@ -535,24 +538,45 @@ class EnergyStates:
         if len(data) < 12:  # Need at least enough bytes for data[4]
             raise ValueError("EnergyStates payload too short")
 
+        if data[0] != 0xFC:
+            raise ValueError(f"EnergyStates[0] == 0x{data[0]:02x} != 0xfc")
+
+        calculated_fcc = calc_fcc(data[1:-1])
+        if calculated_fcc != data[-1]:
+            raise ValueError(f"Invalid checksum, expected 0x{calculated_fcc:02x}, received 0x{data[-1]:02x}")
+
+        # Verify for parts that we think are static:
+        if data[1] != 0x62 and data[1] != 0x7B:
+            logger.warning(f"EnergyStates[1] == 0x{data[1]:02x} != (0x62 or 0x7b)")
+        if data[2] != 0x01:
+            logger.warning(f"EnergyStates[2] == 0x{data[2]:02x} != 0x01")
+        if data[3] != 0x30:
+            logger.warning(f"EnergyStates[3] == 0x{data[3]:02x} != 0x30")
+        if data[4] != 0x10:
+            logger.warning(f"EnergyStates[4] == 0x{data[4]:02x} != 0x10")
+        if data[5] != 0x06:
+            raise ValueError(f"Not EnergyStates message: data[5] == 0x{data[5]:02x} != 0x06")
+
+        obj = cls.__new__(cls)
+        obj._unknown_6_8 = data[6:9]
+
         # Extract compressor frequency from data[3] (position 18-19 in hex string)
-        compressor_frequency = data[9]
+        obj.compressor_frequency = data[9]
 
         # Extract operating status from data[4] (position 20-21 in hex string)
-        operating = data[10] > 0
+        obj.operating = data[10] > 0
+
+        if len(data) > 11:
+            obj._unknown_11_ = data[11:-1]
 
         # Estimate power consumption if we have context
-        estimated_power = None
+        obj.estimated_power = None
         if general_states:
-            estimated_power = cls.estimate_power_consumption(
-                compressor_frequency, general_states.drive_mode, general_states.wind_speed
+            obj.estimated_power = cls.estimate_power_consumption(
+                obj.compressor_frequency, general_states.drive_mode, general_states.wind_speed
             )
 
-        return EnergyStates(
-            compressor_frequency=compressor_frequency,
-            operating=operating,
-            estimated_power_watts=estimated_power,
-        )
+        return obj
 
     @staticmethod
     def estimate_power_consumption(compressor_frequency: int, mode: DriveMode, fan_speed: WindSpeed) -> float:
@@ -614,15 +638,21 @@ class EnergyStates:
 class ErrorStates:
     """Parsed error states from device response"""
 
-    is_abnormal_state: bool = False
-    error_code: str = "8000"
+    error_code: int = 0x8000
+
+    _unknown_6_8: bytes = b"\0\0\0"
+    _unknown_11_: bytes = b""
+
+    @property
+    def is_abnormal_state(self) -> bool:
+        return self.error_code != 0x8000
 
     @staticmethod
     def is_error_states_payload(data: bytes) -> bool:
         """Check if payload contains error states data"""
         if len(data) < 6:
             return False
-        return data[1] in [0x62, 0x7b] and data[5] == 0x04
+        return data[1] in [0x62, 0x7B] and data[5] == 0x04
 
     @classmethod
     def parse_error_states(cls, data: bytes) -> ErrorStates:
@@ -631,13 +661,34 @@ class ErrorStates:
         if len(data) < 11:
             raise ValueError("ErrorStates payload too short")
 
-        error_code = int.from_bytes(data[9:11], "big")
-        is_abnormal_state = (error_code != 0x8000)
+        if data[0] != 0xFC:
+            raise ValueError(f"ErrorStates[0] == 0x{data[0]:02x} != 0xfc")
 
-        return ErrorStates(
-            is_abnormal_state=is_abnormal_state,
-            error_code=format(error_code, "04x"),
-        )
+        calculated_fcc = calc_fcc(data[1:-1])
+        if calculated_fcc != data[-1]:
+            raise ValueError(f"Invalid checksum, expected 0x{calculated_fcc:02x}, received 0x{data[-1]:02x}")
+
+        # Verify for parts that we think are static:
+        if data[1] != 0x62 and data[1] != 0x7B:
+            logger.warning(f"ErrorStates[1] == 0x{data[1]:02x} != (0x62 or 0x7b)")
+        if data[2] != 0x01:
+            logger.warning(f"ErrorStates[2] == 0x{data[2]:02x} != 0x01")
+        if data[3] != 0x30:
+            logger.warning(f"ErrorStates[3] == 0x{data[3]:02x} != 0x30")
+        if data[4] != 0x10:
+            logger.warning(f"ErrorStates[4] == 0x{data[4]:02x} != 0x10")
+        if data[5] != 0x04:
+            raise ValueError(f"Not ErrorStates message: data[5] == 0x{data[5]:02x} != 0x04")
+
+        obj = cls.__new__(cls)
+        obj._unknown_6_8 = data[6:9]
+
+        obj.error_code = int.from_bytes(data[9:11], "big")
+
+        if len(data) > 11:
+            obj._unknown_11_ = data[11:-1]
+
+        return obj
 
 
 @dataclass

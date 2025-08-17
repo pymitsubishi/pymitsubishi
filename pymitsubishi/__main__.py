@@ -19,6 +19,9 @@ if args.reboot:
     ctrl.api.send_reboot_request()
 
 ctrl.fetch_status()
+print("Profile codes:")
+for code in ctrl.profile_code:
+    print("    " + code.hex(" "))
 pprint(ctrl.state.general)
 pprint(ctrl.state.sensors)
 pprint(ctrl.state.energy)

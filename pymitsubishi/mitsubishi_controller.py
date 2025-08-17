@@ -29,6 +29,7 @@ class MitsubishiController:
 
     def __init__(self, api: MitsubishiAPI):
         self.api = api
+        self.profile_code: list[bytes] = []
         self.state = ParsedDeviceState()
 
     @classmethod
@@ -69,6 +70,12 @@ class MitsubishiController:
             serial_elem = root.find(".//SERIAL")
             if serial_elem is not None and serial_elem.text is not None:
                 self.state.serial = serial_elem.text
+
+            profile_elems = root.findall(".//PROFILECODE/DATA/VALUE") or root.findall(".//PROFILECODE/VALUE")
+            self.profile_code = []
+            for elem in profile_elems:
+                if elem.text:
+                    self.profile_code.append(bytes.fromhex(elem.text))
 
         except ET.ParseError as e:
             logger.error(f"Error parsing status response: {e}")

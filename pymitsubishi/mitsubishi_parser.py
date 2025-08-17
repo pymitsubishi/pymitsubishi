@@ -126,11 +126,6 @@ class GeneralStates:
     i_see_sensor: bool = True  # i-See sensor active flag
     wide_vane_adjustment: bool = False
 
-    unknown_6_7: bytes = b"\0\0"
-    unknown_9: int = 0
-    unknown_13_14: bytes = b"\0\0"
-    unknown_20_: bytes = b""
-
     @property
     def temperature(self) -> float:
         if self.fine_temperature is not None:
@@ -178,12 +173,17 @@ class GeneralStates:
             raise ValueError(f"Not GeneralStates message: data[5] == 0x{data[5]:02x} != 0x02")
 
         obj = cls.__new__(cls)
-        obj.unknown_6_7 = data[6:8]
+
+        if data[6:8] != b"\0\0":
+            log_unexpected_value(cls.__name__, 6, data[6:8])
+
         obj.power_on_off = PowerOnOff.get_on_off_status(format(data[8], "02x"))
 
         obj.drive_mode = DriveMode(data[9] & 0x07)
         obj.i_see_sensor = bool(data[9] & 0x08)
-        obj.unknown_9 = data[9] & 0xF0
+
+        if data[9] & 0xF0 != 0x00:
+            log_unexpected_value(cls.__name__, 9, data[9:10])
 
         obj.coarse_temperature = 31 - data[10]
         obj.wind_speed = WindSpeed.get_wind_speed(format(data[11], "02x"))  # data[6] in SwiCago
@@ -191,7 +191,8 @@ class GeneralStates:
             format(data[12], "02x")
         )  # data[7] in SwiCago
 
-        obj.unknown_13_14 = data[13:15]
+        if data[13:15] != b"\0\0":
+            log_unexpected_value(cls.__name__, 13, data[13:15])
 
         # Enhanced wide vane parsing with adjustment flag (SwiCago)
         wide_vane_data = data[15]  # data[10] in SwiCago
@@ -210,8 +211,8 @@ class GeneralStates:
         obj.is_power_saving = data[18] > 0
         obj.wind_and_wind_break_direct = data[19]
 
-        if len(data) > 20:
-            obj.unknown_20_ = data[20:-1]  # don't include the FCC
+        if data[20:-1] != b"\0":  # don't include the FCC
+            log_unexpected_value(cls.__name__, 20, data[20:-1])
 
         return obj
 
@@ -309,11 +310,6 @@ class SensorStates:
     inside_temperature_2: float = 22.0
     runtime_minutes: int = 0
 
-    unknown_6_7: bytes = b"\0\0"
-    unknown_9: bytes = b"\0"
-    unknown_13_14: bytes = b"\0\0"
-    unknown_21_: bytes = b""
-
     @property
     def room_temperature(self) -> float:
         return self.inside_temperature_2
@@ -348,9 +344,15 @@ class SensorStates:
             raise ValueError(f"Not SensorStates message: data[5] == 0x{data[5]:02x} != 0x03")
 
         obj = cls.__new__(cls)
-        obj.unknown_6_7 = data[6:8]
+
+        if data[6:8] != b"\0\0":
+            log_unexpected_value(cls.__name__, 6, data[6:8])
+
         obj.inside_temperature_1_coarse = 10 + data[8]
-        obj.unknown_9 = data[9:10]
+
+        if data[9:10] != b"\0":
+            log_unexpected_value(cls.__name__, 9, data[9:10])
+
         obj.outside_temperature = (data[10] - 0x80) * 0.5
         obj.inside_temperature_1_fine = (data[11] - 0x80) * 0.5
         obj.inside_temperature_2 = (data[12] - 0x80) * 0.5
@@ -359,14 +361,15 @@ class SensorStates:
         # but they seem to move exactly together
         # data[12] moves differently and seems to lead vs data[8]/data[11]
 
-        obj.unknown_13_14 = data[13:15]
+        if data[13:15] != b"\xFE\x42":
+            log_unexpected_value(cls.__name__, 13, data[13:15])
 
         obj.runtime_minutes = int.from_bytes(data[15:19], 'big', signed=False)
         # runtime is at least 24 bit long data[16:19]
         # Since 24 bits is a bit odd, I'm assuming it's 32bit and join in an additional leading 0x00 at data[15]
 
-        if len(data) > 19:
-            obj.unknown_21_ = data[19:-1]
+        if data[19:-1] != b"\0\0":
+            log_unexpected_value(cls.__name__, 19, data[19:-1])
 
         return obj
 
@@ -375,10 +378,9 @@ class SensorStates:
 class EnergyStates:
     """Parsed energy and operational states from device response"""
 
-    unknown_6_8: bytes = b"\0\0\0"
     operating: bool = False
-    power_estimate_watt: int = 0
-    unknown_12_: bytes = b""
+    power_watt: int = 0
+    energy_hecto_watt_hour: int = 0
 
     @staticmethod
     def is_energy_states_payload(data: bytes) -> bool:
@@ -419,18 +421,21 @@ class EnergyStates:
             raise ValueError(f"Not EnergyStates message: data[5] == 0x{data[5]:02x} != 0x06")
 
         obj = cls.__new__(cls)
-        obj.unknown_6_8 = data[6:9]
+
+        if data[6:9] != b"\0\0\0":
+            log_unexpected_value(cls.__name__, 6, data[6:9])
 
         obj.operating = bool(data[9])
         if data[9] not in [0, 1]:
             log_unexpected_value(cls.__name__, 9, data[9:10])
 
-        obj.power_estimate_watt = int.from_bytes(data[10:12], 'big', signed=False)
         # The outdoor unit is reported as part of the first indoor unit (port A)
         # Doesn't match exactly with my power meter, but it's close.
+        obj.power_watt = int.from_bytes(data[10:12], 'big', signed=False)
+        obj.energy_hecto_watt_hour = int.from_bytes(data[12:14], 'big', signed=False)  # in 100Wh units
 
-        if len(data) > 12:
-            obj._unknown_11_ = data[12:-1]
+        if data[14:-1] != b"\0\0\x42\0\0\0\0":
+            log_unexpected_value(cls.__name__, 12, data[12:-1])
 
         return obj
 
@@ -440,9 +445,6 @@ class ErrorStates:
     """Parsed error states from device response"""
 
     error_code: int = 0x8000
-
-    unknown_6_8: bytes = b"\0\0\0"
-    unknown_11_: bytes = b""
 
     @property
     def is_abnormal_state(self) -> bool:
@@ -478,20 +480,20 @@ class ErrorStates:
             raise ValueError(f"Not ErrorStates message: data[5] == 0x{data[5]:02x} != 0x04")
 
         obj = cls.__new__(cls)
-        obj.unknown_6_8 = data[6:9]
+
+        if data[6:9] != b"\0\0\0":
+            log_unexpected_value(cls.__name__, 6, data[6:9])
 
         obj.error_code = int.from_bytes(data[9:11], "big")
 
-        if len(data) > 11:
-            obj.unknown_11_ = data[11:-1]
+        if data[11:-1] != b"\0\0\0\0\0\0\0\0\0\0":
+            log_unexpected_value(cls.__name__, 11, data[11:-1])
 
         return obj
 
 
 @dataclass
 class Unknown5States:
-    unknown_6_: bytes = b""
-
     @staticmethod
     def is_unknown5_states_payload(data: bytes) -> bool:
         """Check if payload contains error states data"""
@@ -522,16 +524,16 @@ class Unknown5States:
             raise ValueError(f"Not {cls.__name__} message: data[5] == 0x{data[5]:02x} != 0x05")
 
         obj = cls.__new__(cls)
-        obj.unknown_6_ = data[6:-1]
+
+        if data[6:-1] != b"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0":
+            log_unexpected_value(cls.__name__, 6, data[6:-1])
 
         return obj
 
 
 @dataclass
 class Unknown9States:
-    unknown_6_8: bytes = b"\0\0\0"
     power_mode: int = 0
-    unknown_10_: bytes = b""
 
     @staticmethod
     def is_unknown9_states_payload(data: bytes) -> bool:
@@ -563,7 +565,9 @@ class Unknown9States:
             raise ValueError(f"Not {cls.__name__} message: data[5] == 0x{data[5]:02x} != 0x09")
 
         obj = cls.__new__(cls)
-        obj.unknown_6_8 = data[6:9]
+
+        if data[6:9] != b"\0\0\0":
+            log_unexpected_value(cls.__name__, 6, data[6:9])
 
         obj.power_mode = data[9]
         # This seems demand-related.
@@ -571,7 +575,8 @@ class Unknown9States:
         # On but not pumping is 1 (operating in Energy turns to 0 in this case)
         # Higher seems to indicate higher demand
 
-        obj.unknown_10_ = data[10:-1]
+        if data[10:-1] != b"\0\0\0\0\0\0\0\0\0\0\0":
+            log_unexpected_value(cls.__name__, 10, data[10:-1])
 
         return obj
 

@@ -11,7 +11,7 @@ from pymitsubishi import SensorStates
     ],
 )
 def test_room_temperature(data_hex, room_temperature):
-    state = SensorStates.parse_sensor_states(data_hex)
+    state = SensorStates.parse_sensor_states(bytes.fromhex(data_hex))
     assert state.room_temperature == room_temperature * 10
 
 
@@ -23,5 +23,5 @@ def test_room_temperature(data_hex, room_temperature):
     ],
 )
 def test_outside_temperature(data_hex, outside_temperature):
-    state = SensorStates.parse_sensor_states(data_hex)
+    state = SensorStates.parse_sensor_states(bytes.fromhex(data_hex))
     assert state.outside_temperature == outside_temperature * 10

@@ -448,24 +448,24 @@ class SensorStates:
     wind_speed_pr557: int = 0
 
     @staticmethod
-    def is_sensor_states_payload(payload: str) -> bool:
+    def is_sensor_states_payload(data: bytes) -> bool:
         """Check if payload contains sensor states data"""
-        if len(payload) < 12:
+        if len(data) < 6:
             return False
-        return payload[2:4] in ["62", "7b"] and payload[10:12] == "03"
+        return data[1] in [0x62, 0x7b] and data[5] == 0x03
 
     @classmethod
-    def parse_sensor_states(cls, payload: str) -> SensorStates:
+    def parse_sensor_states(cls, data: bytes) -> SensorStates:
         """Parse sensor states from hex payload"""
-        logger.debug(f"Parsing sensor states payload: {payload}")
-        if len(payload) < 42:
+        logger.debug(f"Parsing sensor states payload: {data.hex()}")
+        if len(data) < 21:
             raise ValueError("SensorStates payload too short")
 
-        outside_temp_raw = int(payload[20:22], 16)
+        outside_temp_raw = data[10]
         outside_temperature = None if outside_temp_raw < 16 else get_normalized_temperature(outside_temp_raw)
-        room_temperature = get_normalized_temperature(int(payload[24:26], 16))
-        thermal_sensor = (int(payload[38:40], 16) & 0x01) != 0
-        wind_speed_pr557 = 1 if (int(payload[40:42], 16) & 0x01) == 1 else 0
+        room_temperature = get_normalized_temperature(data[12])
+        thermal_sensor = (data[19] & 0x01) != 0
+        wind_speed_pr557 = 1 if (data[20] & 0x01) == 1 else 0
 
         return SensorStates(
             outside_temperature=outside_temperature,
@@ -645,8 +645,8 @@ class ParsedDeviceState:
             # Parse different payload types
             if GeneralStates.is_general_states_payload(value):
                 parsed_state.general = GeneralStates.parse_general_states(value)
-            elif SensorStates.is_sensor_states_payload(hex_lower):
-                parsed_state.sensors = SensorStates.parse_sensor_states(hex_lower)
+            elif SensorStates.is_sensor_states_payload(value):
+                parsed_state.sensors = SensorStates.parse_sensor_states(value)
             elif ErrorStates.is_error_states_payload(hex_lower):
                 parsed_state.errors = ErrorStates.parse_error_states(hex_lower)
             elif EnergyStates.is_energy_states_payload(hex_lower):

@@ -31,6 +31,8 @@ def test_parse_general_states_mode(data_hex, power, mode):
 )
 def test_parse_general_states_temp(data_hex, temp):
     states = GeneralStates.parse_general_states(bytes.fromhex(data_hex))
+    assert states.coarse_temperature == temp * 10
+    assert states.fine_temperature == temp * 10
     assert states.temperature == temp * 10
 
 

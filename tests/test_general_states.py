@@ -31,9 +31,9 @@ def test_parse_general_states_mode(data_hex, power, mode):
 )
 def test_parse_general_states_temp(data_hex, temp):
     states = GeneralStates.parse_general_states(bytes.fromhex(data_hex))
-    assert states.coarse_temperature == temp * 10
-    assert states.fine_temperature == temp * 10
-    assert states.temperature == temp * 10
+    assert states.coarse_temperature == temp
+    assert states.fine_temperature == temp
+    assert states.temperature == temp
 
 
 @pytest.mark.parametrize(
@@ -78,12 +78,7 @@ def test_parse_general_states_vertical_vane(data_hex, v_vane_l: VerticalWindDire
     # The "right" vane bits seem to report the "highest" one
     # The "left" vane stays "auto"
     v_vane = VerticalWindDirection(max(v_vane_l.value, v_vane_r.value))
-    assert states.vertical_wind_direction_right == v_vane
-    assert states.vertical_wind_direction_left == VerticalWindDirection.AUTO
-
-    # Expected behaviour, currently fails:
-    assert states.vertical_wind_direction_left == v_vane_l
-    assert states.vertical_wind_direction_right == v_vane_r
+    assert states.vertical_wind_direction == v_vane
 
 
 @pytest.mark.parametrize(

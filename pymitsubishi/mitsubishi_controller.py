@@ -88,14 +88,12 @@ class MitsubishiController:
 
         return GeneralStates(
             power_on_off=overrides.get("power_on_off", self.state.general.power_on_off),
-            temperature=overrides.get("temperature", self.state.general.temperature),
+            coarse_temperature=int(overrides.get("temperature", self.state.general.temperature)),
+            fine_temperature=overrides.get("temperature", self.state.general.temperature),
             drive_mode=overrides.get("drive_mode", self.state.general.drive_mode),
             wind_speed=overrides.get("wind_speed", self.state.general.wind_speed),
-            vertical_wind_direction_right=overrides.get(
-                "vertical_wind_direction_right", self.state.general.vertical_wind_direction_right
-            ),
-            vertical_wind_direction_left=overrides.get(
-                "vertical_wind_direction_left", self.state.general.vertical_wind_direction_left
+            vertical_wind_direction=overrides.get(
+                "vertical_wind_direction", self.state.general.vertical_wind_direction
             ),
             horizontal_wind_direction=overrides.get(
                 "horizontal_wind_direction", self.state.general.horizontal_wind_direction
@@ -261,15 +259,17 @@ class MitsubishiController:
 
         if self.state.general:
             general_dict: dict[str, Any] = {
-                "power": "ON" if self.state.general.power_on_off == PowerOnOff.ON else "OFF",
+                "power": self.state.general.power_on_off.name,
                 "mode": self.state.general.drive_mode.name,
-                "target_temp": self.state.general.temperature / 10.0,
+                "target_temp": self.state.general.temperature,
                 "fan_speed": self.state.general.wind_speed.name,
                 "dehumidifier_setting": self.state.general.dehum_setting,
                 "power_saving_mode": self.state.general.is_power_saving,
-                "vertical_vane_right": self.state.general.vertical_wind_direction_right.name,
-                "vertical_vane_left": self.state.general.vertical_wind_direction_left.name,
+                "vertical_vane": self.state.general.vertical_wind_direction.name,
                 "horizontal_vane": self.state.general.horizontal_wind_direction.name,
+                "general_unknown_6_7": self.state.general.unknown_6_7.hex(),
+                "general_unknown_13_14": self.state.general.unknown_13_14.hex(),
+                "general_unknown_20_": self.state.general.unknown_20_.hex(),
             }
             summary.update(general_dict)
 
@@ -279,14 +279,43 @@ class MitsubishiController:
                 "outside_temp": self.state.sensors.outside_temperature / 10.0
                 if self.state.sensors.outside_temperature
                 else None,
+                "runtime_minutes": self.state.sensors.runtime_minutes,
+                "sensor_unknown_6_7": self.state.sensors.unknown_6_7.hex(),
+                "temperature_8": self.state.sensors.temperature_8,
+                "sensor_unknown_9": self.state.sensors.unknown_9.hex(),
+                "temperature_11": self.state.sensors.temperature_11,
+                "sensor_unknown_13_14": self.state.sensors.unknown_13_14.hex(),
+                "sensor_unknown_21_": self.state.sensors.unknown_21_.hex(),
             }
             summary.update(sensor_dict)
+
+        if self.state.energy:
+            summary.update({
+                "operating": self.state.energy.operating,
+                "energy_unknown_6_8": self.state.energy.unknown_6_8.hex(),
+                "energy_unknown_10_11": self.state.energy.unknown_10_11,
+                "energy_unknown_12_": self.state.energy.unknown_12_.hex(),
+            })
 
         if self.state.errors:
             error_dict: dict[str, Any] = {
                 "error_code": self.state.errors.error_code,
                 "abnormal_state": self.state.errors.is_abnormal_state,
+                "error_unknown_6_8": self.state.errors.unknown_6_8.hex(),
+                "error_unknown_11_": self.state.errors.unknown_11_.hex(),
             }
             summary.update(error_dict)
+
+        if self.state._unknown5:
+            summary.update({
+                "unknown5_unknown_6_": self.state._unknown5.unknown_6_.hex(),
+            })
+
+        if self.state._unknown9:
+            summary.update({
+                "unknown9_unknown_6_8": self.state._unknown9.unknown_6_8.hex(),
+                "unknown9_unknown_9": self.state._unknown9.unknown_9,
+                "unknown9_unknown_10_": self.state._unknown9.unknown_10_.hex(),
+            })
 
         return summary

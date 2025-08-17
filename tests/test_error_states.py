@@ -10,6 +10,6 @@ from pymitsubishi import ErrorStates
     ],
 )
 def test_error_states(data_hex):
-    state = ErrorStates.parse_error_states(data_hex)
+    state = ErrorStates.parse_error_states(bytes.fromhex(data_hex))
     assert state.error_code == format(0x8000, "04x")
     assert not state.is_abnormal_state

@@ -78,20 +78,6 @@ class TestTemperatureControl:
             assert temp_units < 160 or temp_units > 320  # Invalid range
 
 
-class TestModeControl:
-    """Test AC mode control with real mode mappings."""
-
-    @pytest.mark.parametrize("test_case", MODE_TEST_CASES)
-    def test_mode_mappings(self, test_case):
-        """Test that mode enums map to correct hex values."""
-        mode_name = test_case["mode"]
-        expected_hex = test_case["hex_value"]
-
-        mode = DriveMode[mode_name]
-        # Convert the hex string to integer for comparison
-        assert mode.value == int(expected_hex, 16)
-
-
 @patch("pymitsubishi.mitsubishi_api.requests.post")
 class TestMitsubishiAPIIntegration:
     """Integration tests for MitsubishiAPI with mocked responses."""
@@ -174,11 +160,11 @@ class TestMitsubishiControllerIntegration:
             mock_state.general = Mock()
             mock_state.general.power_on_off = PowerOnOff.ON
             mock_state.general.drive_mode = DriveMode.COOLER
-            mock_state.general.temperature = 225  # 22.5°C
+            mock_state.general.temperature = 22.5
             mock_state.general.wind_speed = WindSpeed.AUTO
             mock_state.sensors = Mock()
-            mock_state.sensors.room_temperature = 220  # 22.0°C
-            mock_state.sensors.outside_temperature = 200  # 20.0°C
+            mock_state.sensors.room_temperature = 22.0
+            mock_state.sensors.outside_temperature = 20.0
 
             summary = self.controller.get_status_summary()
 

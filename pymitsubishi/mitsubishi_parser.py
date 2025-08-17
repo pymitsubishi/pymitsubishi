@@ -29,33 +29,11 @@ class PowerOnOff(Enum):
 
 
 class DriveMode(Enum):
-    AUTO = 8  # Fixed: Changed from 0 to 8 based on actual device behavior
+    AUTO = 0
     HEATER = 1
     DEHUM = 2
     COOLER = 3
     FAN = 7
-    # Extended modes (these appear to be special cases)
-    AUTO_COOLER = 0x1B  # 27 in decimal
-    AUTO_HEATER = 0x19  # 25 in decimal
-
-    @classmethod
-    def get_drive_mode(cls, mode_value: int) -> DriveMode:
-        """Parse drive mode from integer value
-
-        Args:
-            mode_value: Integer mode value (typically masked with 0x07)
-        """
-        # Map the basic mode values (0-7)
-        try:
-            return DriveMode(mode_value)
-        except ValueError:
-            # Handle special extended modes
-            if mode_value == 0x1B:
-                return DriveMode.AUTO_COOLER
-            elif mode_value == 0x19:
-                return DriveMode.AUTO_HEATER
-            # Default to FAN for unknown modes
-            return DriveMode.FAN
 
 
 class WindSpeed(Enum):
@@ -126,6 +104,10 @@ class HorizontalWindDirection(Enum):
         except ValueError:
             return HorizontalWindDirection.AUTO
 
+def log_unexpected_value(code_value: str, position: int, value: bytes):
+    logger.warning(f"Unexpected value found in {code_value} at position {position}: {value.hex()}")
+    logger.warning(f"Please report this, so this can be added to the decoding.")
+
 
 @dataclass
 class GeneralStates:
@@ -141,12 +123,11 @@ class GeneralStates:
     dehum_setting: int = 0
     is_power_saving: bool = False
     wind_and_wind_break_direct: int = 0
-    # Enhanced functionality based on SwiCago insights
-    i_see_sensor: bool = False  # i-See sensor active flag
-    mode_raw_value: int = 0  # Raw mode value before i-See processing
-    wide_vane_adjustment: bool = False  # Wide vane adjustment flag (SwiCago wideVaneAdj)
+    i_see_sensor: bool = True  # i-See sensor active flag
+    wide_vane_adjustment: bool = False
 
     unknown_6_7: bytes = b"\0\0"
+    unknown_9: int = 0
     unknown_13_14: bytes = b"\0\0"
     unknown_20_: bytes = b""
 
@@ -190,13 +171,9 @@ class GeneralStates:
 
         # Verify for parts that we think are static:
         if data[1] != 0x62 and data[1] != 0x7B:
-            logger.warning(f"GeneralStates[1] == 0x{data[1]:02x} != (0x62 or 0x7b)")
-        if data[2] != 0x01:
-            logger.warning(f"GeneralStates[2] == 0x{data[2]:02x} != 0x01")
-        if data[3] != 0x30:
-            logger.warning(f"GeneralStates[3] == 0x{data[3]:02x} != 0x30")
-        if data[4] != 0x10:
-            logger.warning(f"GeneralStates[4] == 0x{data[4]:02x} != 0x10")
+            log_unexpected_value(cls.__name__, 1, data[1:2])
+        if data[2:5] != b"\x01\x30\x10":
+            log_unexpected_value(cls.__name__, 2, data[2:5])
         if data[5] != 0x02:
             raise ValueError(f"Not GeneralStates message: data[5] == 0x{data[5]:02x} != 0x02")
 
@@ -204,9 +181,9 @@ class GeneralStates:
         obj.unknown_6_7 = data[6:8]
         obj.power_on_off = PowerOnOff.get_on_off_status(format(data[8], "02x"))
 
-        # Enhanced mode parsing with i-See sensor detection
-        mode_byte = data[9]  # data[4] in SwiCago
-        obj.drive_mode, obj.i_see_active, obj.raw_mode = cls.parse_mode_with_i_see(mode_byte)
+        obj.drive_mode = DriveMode(data[9] & 0x07)
+        obj.i_see_sensor = bool(data[9] & 0x08)
+        obj.unknown_9 = data[9] & 0xF0
 
         obj.coarse_temperature = 31 - data[10]
         obj.wind_speed = WindSpeed.get_wind_speed(format(data[11], "02x"))  # data[6] in SwiCago
@@ -237,115 +214,6 @@ class GeneralStates:
             obj.unknown_20_ = data[20:-1]  # don't include the FCC
 
         return obj
-
-    @staticmethod
-    def parse_mode_with_i_see(mode_byte: int) -> tuple[DriveMode, bool, int]:
-        """Parse drive mode considering i-See sensor flag
-
-        Based on niobos fork and SwiCago implementation:
-        - Bits 0-2 (0x07): Drive mode
-        - Bit 3 (0x08): i-See sensor flag OR part of mode value for AUTO
-        - Bits 4-7 (0xF0): Unknown/reserved
-
-        Args:
-            mode_byte: Raw mode byte value from payload
-
-        Returns:
-            tuple of (drive_mode, i_see_active, raw_mode_value)
-        """
-        # Special case: AUTO mode uses value 8 (0x08)
-        if mode_byte == 0x08:
-            return DriveMode.AUTO, False, mode_byte
-
-        # Extract drive mode from lower 3 bits for other modes
-        actual_mode_value = mode_byte & 0x07
-
-        # Check if i-See sensor flag is set (bit 3) for non-AUTO modes
-        i_see_active = bool(mode_byte & 0x08)
-
-        # Get the drive mode enum
-        drive_mode = DriveMode.get_drive_mode(actual_mode_value)
-
-        return drive_mode, i_see_active, mode_byte
-
-    @staticmethod
-    def analyze_undocumented_bits(payload: str) -> dict[str, Any]:
-        """Analyze payload for undocumented bit patterns and flags
-
-        This function helps identify unknown functionality by examining
-        bit patterns that haven't been documented yet.
-        """
-        analysis: dict[str, Any] = {
-            "payload_length": len(payload),
-            "suspicious_patterns": [],
-            "high_bits_set": [],
-            "unknown_segments": {},
-        }
-
-        if len(payload) < 42:
-            return analysis
-
-        try:
-            suspicious_patterns: list[dict[str, Any]] = []
-            high_bits_set: list[dict[str, Any]] = []
-            unknown_segments: dict[int, dict[str, Any]] = {}
-
-            # Examine each byte for unusual patterns
-            for i in range(0, min(len(payload), 42), 2):
-                if i + 2 <= len(payload):
-                    byte_hex = payload[i : i + 2]
-                    byte_val = int(byte_hex, 16)
-                    position = i // 2
-
-                    # Look for high bits that might indicate additional flags
-                    if byte_val & 0x80:  # High bit set
-                        high_bits_set.append(
-                            {"position": position, "hex": byte_hex, "value": byte_val, "binary": f"{byte_val:08b}"}
-                        )
-
-                    # Look for patterns that don't match known mappings
-                    if position == 9 and byte_val not in [
-                        0x00,
-                        0x01,
-                        0x02,
-                        0x03,
-                        0x07,
-                        0x08,
-                        0x09,
-                        0x0A,
-                        0x0B,
-                        0x0C,
-                        0x19,
-                        0x1B,
-                    ]:  # Mode byte position
-                        suspicious_patterns.append(
-                            {
-                                "type": "unknown_mode",
-                                "position": position,
-                                "hex": byte_hex,
-                                "value": byte_val,
-                                "possible_i_see": byte_val > 0x08,
-                            }
-                        )
-
-                    # Check for non-zero values in typically unused positions
-                    unused_positions = [12, 17, 19]  # Add more as we discover them
-                    if position in unused_positions and byte_val != 0:
-                        unknown_segments[position] = {
-                            "hex": byte_hex,
-                            "value": byte_val,
-                            "binary": f"{byte_val:08b}",
-                        }
-
-            analysis["suspicious_patterns"] = suspicious_patterns
-            analysis["high_bits_set"] = high_bits_set
-            analysis["unknown_segments"] = unknown_segments
-
-        except (ValueError, IndexError) as e:
-            analysis["parse_error"] = str(e)
-            logger.warning(f"Error analyzing undocumented bits in payload {payload[:20]}...: {e}")
-
-        return analysis
 
     def generate_general_command(self, controls: dict[str, bool]) -> str:
         """Generate general control command hex string"""
@@ -386,7 +254,8 @@ class GeneralStates:
         segments["segment1"] = f"{segment1_value:02x}"
         segments["segment2"] = f"{segment2_value:02x}"
         segments["segment3"] = self.power_on_off.value
-        segments["segment4"] = f"{self.drive_mode.value:02x}"  # Convert int to hex string
+        drive_mode_isee = self.drive_mode.value + (0x08 if self.i_see_sensor else 0x00)
+        segments["segment4"] = f"{drive_mode_isee:02x}"
         segments["segment6"] = f"{self.wind_speed.value:02x}"
         segments["segment7"] = f"{self.vertical_wind_direction.value:02x}"
         segments["segment13"] = f"{self.horizontal_wind_direction.value:02x}"
@@ -434,16 +303,20 @@ class GeneralStates:
 class SensorStates:
     """Parsed sensor states from device response"""
 
-    outside_temperature: int | None = None
-    room_temperature: int = 220  # 22.0°C in 0.1°C units
+    inside_temperature_1_coarse: int = 22
+    outside_temperature: float = 21.0
+    inside_temperature_1_fine: float = 22.0
+    inside_temperature_2: float = 22.0
     runtime_minutes: int = 0
 
     unknown_6_7: bytes = b"\0\0"
-    temperature_8: int = 0
     unknown_9: bytes = b"\0"
-    temperature_11: float = 0
     unknown_13_14: bytes = b"\0\0"
     unknown_21_: bytes = b""
+
+    @property
+    def room_temperature(self) -> float:
+        return self.inside_temperature_2
 
     @staticmethod
     def is_sensor_states_payload(data: bytes) -> bool:
@@ -468,28 +341,19 @@ class SensorStates:
 
         # Verify for parts that we think are static:
         if data[1] != 0x62 and data[1] != 0x7B:
-            logger.warning(f"SensorStates[1] == 0x{data[1]:02x} != (0x62 or 0x7b)")
-        if data[2] != 0x01:
-            logger.warning(f"SensorStates[2] == 0x{data[2]:02x} != 0x01")
-        if data[3] != 0x30:
-            logger.warning(f"SensorStates[3] == 0x{data[3]:02x} != 0x30")
-        if data[4] != 0x10:
-            logger.warning(f"SensorStates[4] == 0x{data[4]:02x} != 0x10")
+            log_unexpected_value(cls.__name__, 1, data[1:2])
+        if data[2:5] != b"\x01\x30\x10":
+            log_unexpected_value(cls.__name__, 2, data[2:5])
         if data[5] != 0x03:
             raise ValueError(f"Not SensorStates message: data[5] == 0x{data[5]:02x} != 0x03")
 
         obj = cls.__new__(cls)
         obj.unknown_6_7 = data[6:8]
-
-        obj.temperature_8 = 10 + data[8]
-
+        obj.inside_temperature_1_coarse = 10 + data[8]
         obj.unknown_9 = data[9:10]
-
-        outside_temp_raw = data[10]
-        obj.outside_temperature = None if outside_temp_raw < 16 else get_normalized_temperature(outside_temp_raw)
-
-        obj.temperature_11 = (data[11] - 0x80) * 0.5
-        obj.room_temperature = get_normalized_temperature(data[12])
+        obj.outside_temperature = (data[10] - 0x80) * 0.5
+        obj.inside_temperature_1_fine = (data[11] - 0x80) * 0.5
+        obj.inside_temperature_2 = (data[12] - 0x80) * 0.5
         # What's the difference between data[8], data[11] and data[12]?
         # data[8] and data[11] seem to be the exact same value (with different conversion & thus truncation)
         # but they seem to move exactly together
@@ -512,8 +376,8 @@ class EnergyStates:
     """Parsed energy and operational states from device response"""
 
     unknown_6_8: bytes = b"\0\0\0"
-    operating: int = 0
-    unknown_10_11: int = 0
+    operating: bool = False
+    power_estimate_watt: int = 0
     unknown_12_: bytes = b""
 
     @staticmethod
@@ -548,30 +412,22 @@ class EnergyStates:
 
         # Verify for parts that we think are static:
         if data[1] != 0x62 and data[1] != 0x7B:
-            logger.warning(f"EnergyStates[1] == 0x{data[1]:02x} != (0x62 or 0x7b)")
-        if data[2] != 0x01:
-            logger.warning(f"EnergyStates[2] == 0x{data[2]:02x} != 0x01")
-        if data[3] != 0x30:
-            logger.warning(f"EnergyStates[3] == 0x{data[3]:02x} != 0x30")
-        if data[4] != 0x10:
-            logger.warning(f"EnergyStates[4] == 0x{data[4]:02x} != 0x10")
+            log_unexpected_value(cls.__name__, 1, data[1:2])
+        if data[2:5] != b"\x01\x30\x10":
+            log_unexpected_value(cls.__name__, 2, data[2:5])
         if data[5] != 0x06:
             raise ValueError(f"Not EnergyStates message: data[5] == 0x{data[5]:02x} != 0x06")
 
         obj = cls.__new__(cls)
         obj.unknown_6_8 = data[6:9]
 
-        obj.operating = data[9]
+        obj.operating = bool(data[9])
+        if data[9] not in [0, 1]:
+            log_unexpected_value(cls.__name__, 9, data[9:10])
 
-        obj.unknown_10_11 = int.from_bytes(data[10:12], 'big', signed=False)
-        # Looks like power consumption in Watt.
+        obj.power_estimate_watt = int.from_bytes(data[10:12], 'big', signed=False)
         # The outdoor unit is reported as part of the first indoor unit (port A)
         # Doesn't match exactly with my power meter, but it's close.
-        #
-        # Notes below were for data[11] without data[10]
-        # When Off, this seems to go up/down in sync with the crank case heater on one indoor unit per outdoor unit
-        # When on, it doesn't exactly follow the power consumption, but does seem correlated
-        # Something-something pressure?
 
         if len(data) > 12:
             obj._unknown_11_ = data[12:-1]
@@ -615,13 +471,9 @@ class ErrorStates:
 
         # Verify for parts that we think are static:
         if data[1] != 0x62 and data[1] != 0x7B:
-            logger.warning(f"ErrorStates[1] == 0x{data[1]:02x} != (0x62 or 0x7b)")
-        if data[2] != 0x01:
-            logger.warning(f"ErrorStates[2] == 0x{data[2]:02x} != 0x01")
-        if data[3] != 0x30:
-            logger.warning(f"ErrorStates[3] == 0x{data[3]:02x} != 0x30")
-        if data[4] != 0x10:
-            logger.warning(f"ErrorStates[4] == 0x{data[4]:02x} != 0x10")
+            log_unexpected_value(cls.__name__, 1, data[1:2])
+        if data[2:5] != b"\x01\x30\x10":
+            log_unexpected_value(cls.__name__, 2, data[2:5])
         if data[5] != 0x04:
             raise ValueError(f"Not ErrorStates message: data[5] == 0x{data[5]:02x} != 0x04")
 
@@ -663,13 +515,9 @@ class Unknown5States:
 
         # Verify for parts that we think are static:
         if data[1] != 0x62 and data[1] != 0x7B:
-            logger.warning(f"{cls.__name__}[1] == 0x{data[1]:02x} != (0x62 or 0x7b)")
-        if data[2] != 0x01:
-            logger.warning(f"{cls.__name__}[2] == 0x{data[2]:02x} != 0x01")
-        if data[3] != 0x30:
-            logger.warning(f"{cls.__name__}[3] == 0x{data[3]:02x} != 0x30")
-        if data[4] != 0x10:
-            logger.warning(f"{cls.__name__}[4] == 0x{data[4]:02x} != 0x10")
+            log_unexpected_value(cls.__name__, 1, data[1:2])
+        if data[2:5] != b"\x01\x30\x10":
+            log_unexpected_value(cls.__name__, 2, data[2:5])
         if data[5] != 0x05:
             raise ValueError(f"Not {cls.__name__} message: data[5] == 0x{data[5]:02x} != 0x05")
 
@@ -682,7 +530,7 @@ class Unknown5States:
 @dataclass
 class Unknown9States:
     unknown_6_8: bytes = b"\0\0\0"
-    unknown_9: int = 0
+    power_mode: int = 0
     unknown_10_: bytes = b""
 
     @staticmethod
@@ -708,23 +556,19 @@ class Unknown9States:
 
         # Verify for parts that we think are static:
         if data[1] != 0x62 and data[1] != 0x7B:
-            logger.warning(f"{cls.__name__}[1] == 0x{data[1]:02x} != (0x62 or 0x7b)")
-        if data[2] != 0x01:
-            logger.warning(f"{cls.__name__}[2] == 0x{data[2]:02x} != 0x01")
-        if data[3] != 0x30:
-            logger.warning(f"{cls.__name__}[3] == 0x{data[3]:02x} != 0x30")
-        if data[4] != 0x10:
-            logger.warning(f"{cls.__name__}[4] == 0x{data[4]:02x} != 0x10")
+            log_unexpected_value(cls.__name__, 1, data[1:2])
+        if data[2:5] != b"\x01\x30\x10":
+            log_unexpected_value(cls.__name__, 2, data[2:5])
         if data[5] != 0x09:
             raise ValueError(f"Not {cls.__name__} message: data[5] == 0x{data[5]:02x} != 0x09")
 
         obj = cls.__new__(cls)
         obj.unknown_6_8 = data[6:9]
 
-        obj.unknown_9 = data[9]
+        obj.power_mode = data[9]
         # This seems demand-related.
         # It's 0 when off, and goes up to 6 (?)
-        # On but not pumping is 1 (operating in Energy turns to 0 there)
+        # On but not pumping is 1 (operating in Energy turns to 0 in this case)
         # Higher seems to indicate higher demand
 
         obj.unknown_10_ = data[10:-1]
@@ -800,13 +644,12 @@ class ParsedDeviceState:
                 "wind_and_wind_break_direct": self.general.wind_and_wind_break_direct,
                 # Enhanced functionality
                 "i_see_sensor_active": self.general.i_see_sensor,
-                "mode_raw_value": self.general.mode_raw_value,
             }
             result["general_states"] = general_dict
 
         if self.sensors:
             sensor_dict: dict[str, Any] = {
-                "room_temperature_celsius": self.sensors.room_temperature / 10.0,
+                "room_temperature_celsius": self.sensors.inside_temperature_2 / 10.0,
                 "outside_temperature_celsius": self.sensors.outside_temperature / 10.0
                 if self.sensors.outside_temperature
                 else None,

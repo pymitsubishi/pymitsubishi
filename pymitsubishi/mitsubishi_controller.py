@@ -275,6 +275,7 @@ class MitsubishiController:
                 "vertical_vane": self.state.general.vertical_wind_direction.name,
                 "horizontal_vane": self.state.general.horizontal_wind_direction.name,
                 "general_unknown_6_7": self.state.general.unknown_6_7.hex(),
+                "general_unknown_9": self.state.general.unknown_9,
                 "general_unknown_13_14": self.state.general.unknown_13_14.hex(),
                 "general_unknown_20_": self.state.general.unknown_20_.hex(),
             }
@@ -282,15 +283,14 @@ class MitsubishiController:
 
         if self.state.sensors:
             sensor_dict: dict[str, Any] = {
-                "room_temp": self.state.sensors.room_temperature / 10.0,
-                "outside_temp": self.state.sensors.outside_temperature / 10.0
-                if self.state.sensors.outside_temperature
-                else None,
+                "room_temp": self.state.sensors.room_temperature,
+                "outside_temp": self.state.sensors.outside_temperature,
                 "runtime_minutes": self.state.sensors.runtime_minutes,
                 "sensor_unknown_6_7": self.state.sensors.unknown_6_7.hex(),
-                "temperature_8": self.state.sensors.temperature_8,
+                "inside_temperature_1_coarse": self.state.sensors.inside_temperature_1_coarse,
+                "inside_temperature_1_fine": self.state.sensors.inside_temperature_1_fine,
+                "inside_temperature_2": self.state.sensors.inside_temperature_2,
                 "sensor_unknown_9": self.state.sensors.unknown_9.hex(),
-                "temperature_11": self.state.sensors.temperature_11,
                 "sensor_unknown_13_14": self.state.sensors.unknown_13_14.hex(),
                 "sensor_unknown_21_": self.state.sensors.unknown_21_.hex(),
             }
@@ -300,7 +300,7 @@ class MitsubishiController:
             summary.update({
                 "operating": self.state.energy.operating,
                 "energy_unknown_6_8": self.state.energy.unknown_6_8.hex(),
-                "energy_unknown_10_11": self.state.energy.unknown_10_11,
+                "power_estimate_watt": self.state.energy.power_estimate_watt,
                 "energy_unknown_12_": self.state.energy.unknown_12_.hex(),
             })
 
@@ -321,7 +321,7 @@ class MitsubishiController:
         if self.state._unknown9:
             summary.update({
                 "unknown9_unknown_6_8": self.state._unknown9.unknown_6_8.hex(),
-                "unknown9_unknown_9": self.state._unknown9.unknown_9,
+                "power_mode": self.state._unknown9.power_mode,
                 "unknown9_unknown_10_": self.state._unknown9.unknown_10_.hex(),
             })
 

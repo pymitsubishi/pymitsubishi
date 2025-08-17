@@ -60,7 +60,7 @@ class TestTemperatureConversion:
             assert len(segment) == 2
 
             # Test segment format conversion
-            segment14 = convert_temperature_to_segment(temp_units)
+            segment14 = convert_temperature_to_segment(int(temp_units / 10))
             assert len(segment14) == 2
 
             # Test reverse conversion
@@ -105,24 +105,6 @@ class TestModeAndStatusParsing:
         if code in ["01", "02"]:
             assert status == PowerOnOff.ON
 
-    @pytest.mark.parametrize(
-        "mode,expected",
-        [
-            (0x01, DriveMode.HEATER),
-            (0x02, DriveMode.DEHUM),
-            (0x03, DriveMode.COOLER),
-            (0x07, DriveMode.FAN),
-            (0x08, DriveMode.AUTO),
-            (0x19, DriveMode.AUTO_HEATER),
-            (0x1B, DriveMode.AUTO_COOLER),
-        ],
-    )
-    def test_drive_mode_parsing(self, mode, expected):
-        """Test drive mode parsing with real mode codes."""
-        # Real device mode mappings from actual responses
-        # Note: get_drive_mode expects integer values, not hex strings
-        parsed_mode = DriveMode.get_drive_mode(mode)
-        assert parsed_mode == expected
 
     @pytest.mark.parametrize(
         "code",

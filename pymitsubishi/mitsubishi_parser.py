@@ -17,15 +17,8 @@ logger = logging.getLogger(__name__)
 
 
 class PowerOnOff(Enum):
-    OFF = "00"
-    ON = "01"
-
-    @classmethod
-    def get_on_off_status(cls, segment: str) -> PowerOnOff:
-        if segment in ["01", "02"]:
-            return PowerOnOff.ON
-        else:
-            return PowerOnOff.OFF
+    OFF = 0
+    ON = 1
 
 
 class DriveMode(Enum):
@@ -44,19 +37,6 @@ class WindSpeed(Enum):
     LEVEL_4 = 5
     LEVEL_FULL = 6
 
-    @classmethod
-    def get_wind_speed(cls, segment: str) -> WindSpeed:
-        """Parse wind speed from segment"""
-        speed_map = {
-            "00": WindSpeed.AUTO,
-            "01": WindSpeed.LEVEL_1,
-            "02": WindSpeed.LEVEL_2,
-            "03": WindSpeed.LEVEL_3,
-            "05": WindSpeed.LEVEL_4,
-            "06": WindSpeed.LEVEL_FULL,
-        }
-        return speed_map.get(segment, WindSpeed.AUTO)
-
 
 class VerticalWindDirection(Enum):
     AUTO = 0
@@ -66,20 +46,6 @@ class VerticalWindDirection(Enum):
     V4 = 4
     V5 = 5
     SWING = 7
-
-    @classmethod
-    def get_vertical_wind_direction(cls, segment: str) -> VerticalWindDirection:
-        """Parse vertical wind direction from segment"""
-        direction_map = {
-            "00": VerticalWindDirection.AUTO,
-            "01": VerticalWindDirection.V1,
-            "02": VerticalWindDirection.V2,
-            "03": VerticalWindDirection.V3,
-            "04": VerticalWindDirection.V4,
-            "05": VerticalWindDirection.V5,
-            "07": VerticalWindDirection.SWING,
-        }
-        return direction_map.get(segment, VerticalWindDirection.AUTO)
 
 
 class HorizontalWindDirection(Enum):
@@ -95,14 +61,6 @@ class HorizontalWindDirection(Enum):
     LCR = 9
     LCR_S = 12
 
-    @classmethod
-    def get_horizontal_wind_direction(cls, segment: str) -> HorizontalWindDirection:
-        """Parse horizontal wind direction from segment"""
-        value = int(segment, 16) & 0x7F  # 127 & value
-        try:
-            return HorizontalWindDirection(value)
-        except ValueError:
-            return HorizontalWindDirection.AUTO
 
 def log_unexpected_value(code_value: str, position: int, value: bytes):
     logger.warning(f"Unexpected value found in {code_value} at position {position}: {value.hex()}")
@@ -177,7 +135,7 @@ class GeneralStates:
         if data[6:8] != b"\0\0":
             log_unexpected_value(cls.__name__, 6, data[6:8])
 
-        obj.power_on_off = PowerOnOff.get_on_off_status(format(data[8], "02x"))
+        obj.power_on_off = PowerOnOff(data[8])
 
         obj.drive_mode = DriveMode(data[9] & 0x07)
         obj.i_see_sensor = bool(data[9] & 0x08)
@@ -186,19 +144,15 @@ class GeneralStates:
             log_unexpected_value(cls.__name__, 9, data[9:10])
 
         obj.coarse_temperature = 31 - data[10]
-        obj.wind_speed = WindSpeed.get_wind_speed(format(data[11], "02x"))  # data[6] in SwiCago
-        obj.vertical_wind_direction = VerticalWindDirection.get_vertical_wind_direction(
-            format(data[12], "02x")
-        )  # data[7] in SwiCago
+        obj.wind_speed = WindSpeed(data[11])  # data[6] in SwiCago
+        obj.vertical_wind_direction = VerticalWindDirection(data[12])  # data[7] in SwiCago
 
         if data[13:15] != b"\0\0":
             log_unexpected_value(cls.__name__, 13, data[13:15])
 
         # Enhanced wide vane parsing with adjustment flag (SwiCago)
         wide_vane_data = data[15]  # data[10] in SwiCago
-        obj.horizontal_wind_direction = HorizontalWindDirection.get_horizontal_wind_direction(
-            f"{wide_vane_data & 0x0F:02x}"
-        )  # Lower 4 bits
+        obj.horizontal_wind_direction = HorizontalWindDirection(wide_vane_data & 0x0F)  # Lower 4 bits
         obj.wide_vane_adjustment = (wide_vane_data & 0xF0) == 0x80  # Upper 4 bits = 0x80
 
         if data[16] != 0x00:
@@ -254,7 +208,7 @@ class GeneralStates:
 
         segments["segment1"] = f"{segment1_value:02x}"
         segments["segment2"] = f"{segment2_value:02x}"
-        segments["segment3"] = self.power_on_off.value
+        segments["segment3"] = f"{self.power_on_off.value:02x}"
         drive_mode_isee = self.drive_mode.value + (0x08 if self.i_see_sensor else 0x00)
         segments["segment4"] = f"{drive_mode_isee:02x}"
         segments["segment6"] = f"{self.wind_speed.value:02x}"

@@ -82,57 +82,6 @@ class TestTemperatureConversion:
         assert get_normalized_temperature(0xFF) == 400  # Above maximum
 
 
-class TestModeAndStatusParsing:
-    """Test parsing of mode and status values from real device responses."""
-
-    @pytest.mark.parametrize(
-        "code",
-        [
-            "00",
-            "01",
-            "02",
-            "03",
-            "ff",
-        ],
-    )
-    def test_power_status_parsing(self, code):
-        """Test power status parsing with real status codes."""
-        # Real device power status patterns
-        status = PowerOnOff.get_on_off_status(code)
-        assert status in [PowerOnOff.ON, PowerOnOff.OFF]
-
-        # Codes 01 and 02 should be ON, others typically OFF
-        if code in ["01", "02"]:
-            assert status == PowerOnOff.ON
-
-
-    @pytest.mark.parametrize(
-        "code",
-        [
-            "00",
-            "01",
-            "02",
-            "03",
-            "05",
-            "06",
-            "ff",
-        ],
-    )
-    def test_wind_speed_parsing(self, code):
-        """Test wind speed parsing with real speed codes."""
-        # Test that wind speed parsing works with common codes
-        speed = WindSpeed.get_wind_speed(code)
-        assert isinstance(speed, WindSpeed)
-        assert speed in [
-            WindSpeed.AUTO,
-            WindSpeed.LEVEL_1,
-            WindSpeed.LEVEL_2,
-            WindSpeed.LEVEL_3,
-            WindSpeed.LEVEL_4,
-            WindSpeed.LEVEL_FULL,
-        ]
-
-
 class TestCodeValueParsing:
     """Test parsing of real CODE values from device responses."""
 

@@ -160,7 +160,7 @@ class GeneralStates:
         return payload[2:4] in ["62", "7b"] and payload[10:12] == "02"
 
     @classmethod
-    def parse_general_states(cls, payload: str) -> GeneralStates | None:
+    def parse_general_states(cls, payload: str) -> GeneralStates:
         """Parse general states from hex payload with enhanced SwiCago-based parsing
 
         Enhanced with SwiCago insights:
@@ -170,84 +170,80 @@ class GeneralStates:
         """
         logger.debug(f"Parsing general states payload: {payload}")
         if len(payload) < 42:
-            return None
+            raise ValueError("GeneralStates payload too short")
 
-        try:
-            power_on_off = PowerOnOff.get_on_off_status(payload[16:18])
+        power_on_off = PowerOnOff.get_on_off_status(payload[16:18])
 
-            # Enhanced temperature parsing (SwiCago logic)
-            # Check for direct temperature mode first (data[11] != 0x00)
-            temp_mode = False
-            temperature = 220  # Default to 22.0°C
+        # Enhanced temperature parsing (SwiCago logic)
+        # Check for direct temperature mode first (data[11] != 0x00)
+        temp_mode = False
+        temperature = 220  # Default to 22.0°C
 
-            # Our payload structure starts with 'fc62013010' (5 bytes) then data begins
-            # So data[0] is at position 10-11, data[1] at 12-13, etc.
-            # data[5] (temp segment) would be at position 20-21
-            # data[11] (direct temp) would be at position 32-33
+        # Our payload structure starts with 'fc62013010' (5 bytes) then data begins
+        # So data[0] is at position 10-11, data[1] at 12-13, etc.
+        # data[5] (temp segment) would be at position 20-21
+        # data[11] (direct temp) would be at position 32-33
 
-            if len(payload) > 33:  # Check if we have data[11] position (32-33)
-                temp_direct_raw = int(payload[32:34], 16)  # data[11] in SwiCago
-                if temp_direct_raw != 0x00:
-                    # Direct temperature mode (SwiCago tempMode = true)
-                    temp_mode = True
-                    temp_celsius = (temp_direct_raw - 128) / 2.0
-                    temperature = int(temp_celsius * 10)  # Convert to 0.1°C units
-                else:
-                    # Segment-based temperature (SwiCago tempMode = false)
-                    temp_mode = False
-                    if len(payload) > 21:  # Check if we have data[5] position (20-21)
-                        temperature = get_normalized_temperature(int(payload[20:22], 16))  # data[5] in SwiCago
-            elif len(payload) > 21:  # Fallback to segment-based parsing if we don't have data[11]
-                temperature = get_normalized_temperature(int(payload[20:22], 16))
+        if len(payload) > 33:  # Check if we have data[11] position (32-33)
+            temp_direct_raw = int(payload[32:34], 16)  # data[11] in SwiCago
+            if temp_direct_raw != 0x00:
+                # Direct temperature mode (SwiCago tempMode = true)
+                temp_mode = True
+                temp_celsius = (temp_direct_raw - 128) / 2.0
+                temperature = int(temp_celsius * 10)  # Convert to 0.1°C units
+            else:
+                # Segment-based temperature (SwiCago tempMode = false)
+                temp_mode = False
+                if len(payload) > 21:  # Check if we have data[5] position (20-21)
+                    temperature = get_normalized_temperature(int(payload[20:22], 16))  # data[5] in SwiCago
+        elif len(payload) > 21:  # Fallback to segment-based parsing if we don't have data[11]
+            temperature = get_normalized_temperature(int(payload[20:22], 16))
 
-            # Enhanced mode parsing with i-See sensor detection
-            mode_byte = int(payload[18:20], 16)  # data[4] in SwiCago
-            drive_mode, i_see_active, raw_mode = cls.parse_mode_with_i_see(mode_byte)
+        # Enhanced mode parsing with i-See sensor detection
+        mode_byte = int(payload[18:20], 16)  # data[4] in SwiCago
+        drive_mode, i_see_active, raw_mode = cls.parse_mode_with_i_see(mode_byte)
 
-            wind_speed = WindSpeed.get_wind_speed(payload[22:24])  # data[6] in SwiCago
-            right_vertical_wind_direction = VerticalWindDirection.get_vertical_wind_direction(
-                payload[24:26]
-            )  # data[7] in SwiCago
-            left_vertical_wind_direction = VerticalWindDirection.get_vertical_wind_direction(payload[40:42])
+        wind_speed = WindSpeed.get_wind_speed(payload[22:24])  # data[6] in SwiCago
+        right_vertical_wind_direction = VerticalWindDirection.get_vertical_wind_direction(
+            payload[24:26]
+        )  # data[7] in SwiCago
+        left_vertical_wind_direction = VerticalWindDirection.get_vertical_wind_direction(payload[40:42])
 
-            # Enhanced wide vane parsing with adjustment flag (SwiCago)
-            wide_vane_data = int(payload[30:32], 16) if len(payload) > 31 else 0  # data[10] in SwiCago
-            horizontal_wind_direction = HorizontalWindDirection.get_horizontal_wind_direction(
-                f"{wide_vane_data & 0x0F:02x}"
-            )  # Lower 4 bits
-            wide_vane_adjustment = (wide_vane_data & 0xF0) == 0x80  # Upper 4 bits = 0x80
+        # Enhanced wide vane parsing with adjustment flag (SwiCago)
+        wide_vane_data = int(payload[30:32], 16) if len(payload) > 31 else 0  # data[10] in SwiCago
+        horizontal_wind_direction = HorizontalWindDirection.get_horizontal_wind_direction(
+            f"{wide_vane_data & 0x0F:02x}"
+        )  # Lower 4 bits
+        wide_vane_adjustment = (wide_vane_data & 0xF0) == 0x80  # Upper 4 bits = 0x80
 
-            # Extra states
-            dehum_setting = int(payload[34:36], 16) if len(payload) > 35 else 0
-            is_power_saving = int(payload[36:38], 16) > 0 if len(payload) > 37 else False
-            wind_and_wind_break_direct = int(payload[38:40], 16) if len(payload) > 39 else 0
+        # Extra states
+        dehum_setting = int(payload[34:36], 16) if len(payload) > 35 else 0
+        is_power_saving = int(payload[36:38], 16) > 0 if len(payload) > 37 else False
+        wind_and_wind_break_direct = int(payload[38:40], 16) if len(payload) > 39 else 0
 
-            # Analyze undocumented bits for research purposes
-            undocumented_analysis = cls.analyze_undocumented_bits(payload)
+        # Analyze undocumented bits for research purposes
+        undocumented_analysis = cls.analyze_undocumented_bits(payload)
 
-            return GeneralStates(
-                power_on_off=power_on_off,
-                temperature=temperature,
-                drive_mode=drive_mode,
-                wind_speed=wind_speed,
-                vertical_wind_direction_right=right_vertical_wind_direction,
-                vertical_wind_direction_left=left_vertical_wind_direction,
-                horizontal_wind_direction=horizontal_wind_direction,
-                dehum_setting=dehum_setting,
-                is_power_saving=is_power_saving,
-                wind_and_wind_break_direct=wind_and_wind_break_direct,
-                # Enhanced functionality based on SwiCago
-                i_see_sensor=i_see_active,
-                mode_raw_value=raw_mode,
-                wide_vane_adjustment=wide_vane_adjustment,
-                temp_mode=temp_mode,
-                undocumented_flags=undocumented_analysis
-                if undocumented_analysis.get("suspicious_patterns") or undocumented_analysis.get("unknown_segments")
-                else None,
-            )
-        except (ValueError, IndexError) as e:
-            logger.warning(f"Failed to parse general states from payload {payload[:20]}...: {e}")
-            return None
+        return GeneralStates(
+            power_on_off=power_on_off,
+            temperature=temperature,
+            drive_mode=drive_mode,
+            wind_speed=wind_speed,
+            vertical_wind_direction_right=right_vertical_wind_direction,
+            vertical_wind_direction_left=left_vertical_wind_direction,
+            horizontal_wind_direction=horizontal_wind_direction,
+            dehum_setting=dehum_setting,
+            is_power_saving=is_power_saving,
+            wind_and_wind_break_direct=wind_and_wind_break_direct,
+            # Enhanced functionality based on SwiCago
+            i_see_sensor=i_see_active,
+            mode_raw_value=raw_mode,
+            wide_vane_adjustment=wide_vane_adjustment,
+            temp_mode=temp_mode,
+            undocumented_flags=undocumented_analysis
+            if undocumented_analysis.get("suspicious_patterns") or undocumented_analysis.get("unknown_segments")
+            else None,
+        )
 
     @staticmethod
     def parse_mode_with_i_see(mode_byte: int) -> tuple[DriveMode, bool, int]:
@@ -458,28 +454,24 @@ class SensorStates:
         return payload[2:4] in ["62", "7b"] and payload[10:12] == "03"
 
     @classmethod
-    def parse_sensor_states(cls, payload: str) -> SensorStates | None:
+    def parse_sensor_states(cls, payload: str) -> SensorStates:
         """Parse sensor states from hex payload"""
         logger.debug(f"Parsing sensor states payload: {payload}")
         if len(payload) < 42:
-            return None
+            raise ValueError("SensorStates payload too short")
 
-        try:
-            outside_temp_raw = int(payload[20:22], 16)
-            outside_temperature = None if outside_temp_raw < 16 else get_normalized_temperature(outside_temp_raw)
-            room_temperature = get_normalized_temperature(int(payload[24:26], 16))
-            thermal_sensor = (int(payload[38:40], 16) & 0x01) != 0
-            wind_speed_pr557 = 1 if (int(payload[40:42], 16) & 0x01) == 1 else 0
+        outside_temp_raw = int(payload[20:22], 16)
+        outside_temperature = None if outside_temp_raw < 16 else get_normalized_temperature(outside_temp_raw)
+        room_temperature = get_normalized_temperature(int(payload[24:26], 16))
+        thermal_sensor = (int(payload[38:40], 16) & 0x01) != 0
+        wind_speed_pr557 = 1 if (int(payload[40:42], 16) & 0x01) == 1 else 0
 
-            return SensorStates(
-                outside_temperature=outside_temperature,
-                room_temperature=room_temperature,
-                thermal_sensor=thermal_sensor,
-                wind_speed_pr557=wind_speed_pr557,
-            )
-        except (ValueError, IndexError) as e:
-            logger.warning(f"Failed to parse sensor states from payload {payload[:20]}...: {e}")
-            return None
+        return SensorStates(
+            outside_temperature=outside_temperature,
+            room_temperature=room_temperature,
+            thermal_sensor=thermal_sensor,
+            wind_speed_pr557=wind_speed_pr557,
+        )
 
 
 @dataclass
@@ -498,7 +490,7 @@ class EnergyStates:
         return payload[2:4] in ["62", "7b"] and payload[10:12] == "06"
 
     @classmethod
-    def parse_energy_states(cls, payload: str, general_states: GeneralStates | None = None) -> EnergyStates | None:
+    def parse_energy_states(cls, payload: str, general_states: GeneralStates | None = None) -> EnergyStates:
         """Parse energy/status states from hex payload (SwiCago group 06)
 
         Based on SwiCago implementation:
@@ -511,30 +503,26 @@ class EnergyStates:
         """
         logger.debug(f"Parsing energy states payload: {payload}")
         if len(payload) < 24:  # Need at least enough bytes for data[4]
-            return None
+            raise ValueError("EnergyStates payload too short")
 
-        try:
-            # Extract compressor frequency from data[3] (position 18-19 in hex string)
-            compressor_frequency = int(payload[18:20], 16)
+        # Extract compressor frequency from data[3] (position 18-19 in hex string)
+        compressor_frequency = int(payload[18:20], 16)
 
-            # Extract operating status from data[4] (position 20-21 in hex string)
-            operating = int(payload[20:22], 16) > 0
+        # Extract operating status from data[4] (position 20-21 in hex string)
+        operating = int(payload[20:22], 16) > 0
 
-            # Estimate power consumption if we have context
-            estimated_power = None
-            if general_states:
-                estimated_power = cls.estimate_power_consumption(
-                    compressor_frequency, general_states.drive_mode, general_states.wind_speed
-                )
-
-            return EnergyStates(
-                compressor_frequency=compressor_frequency,
-                operating=operating,
-                estimated_power_watts=estimated_power,
+        # Estimate power consumption if we have context
+        estimated_power = None
+        if general_states:
+            estimated_power = cls.estimate_power_consumption(
+                compressor_frequency, general_states.drive_mode, general_states.wind_speed
             )
-        except (ValueError, IndexError) as e:
-            logger.warning(f"Failed to parse energy states from payload {payload[:20]}...: {e}")
-            return None
+
+        return EnergyStates(
+            compressor_frequency=compressor_frequency,
+            operating=operating,
+            estimated_power_watts=estimated_power,
+        )
 
     @staticmethod
     def estimate_power_consumption(compressor_frequency: int, mode: DriveMode, fan_speed: WindSpeed) -> float:
@@ -607,25 +595,21 @@ class ErrorStates:
         return payload[2:4] in ["62", "7b"] and payload[10:12] == "04"
 
     @classmethod
-    def parse_error_states(cls, payload: str) -> ErrorStates | None:
+    def parse_error_states(cls, payload: str) -> ErrorStates:
         """Parse error states from hex payload"""
         logger.debug(f"Parsing error states payload: {payload}")
         if len(payload) < 22:
-            return None
+            raise ValueError("ErrorStates payload too short")
 
-        try:
-            code_head = payload[18:20]
-            code_tail = payload[20:22]
-            is_abnormal_state = not (code_head == "80" and code_tail == "00")
-            error_code = f"{code_head}{code_tail}"
+        code_head = payload[18:20]
+        code_tail = payload[20:22]
+        is_abnormal_state = not (code_head == "80" and code_tail == "00")
+        error_code = f"{code_head}{code_tail}"
 
-            return ErrorStates(
-                is_abnormal_state=is_abnormal_state,
-                error_code=error_code,
-            )
-        except (ValueError, IndexError) as e:
-            logger.warning(f"Failed to parse error states from payload {payload[:20]}...: {e}")
-            return None
+        return ErrorStates(
+            is_abnormal_state=is_abnormal_state,
+            error_code=error_code,
+        )
 
 
 @dataclass

@@ -30,7 +30,8 @@ class MitsubishiController:
     def __init__(self, api: MitsubishiAPI):
         self.api = api
         self.profile_code: list[bytes] = []
-        self.state = ParsedDeviceState()
+        self.state = None
+        self.unit_info = None
 
     @classmethod
     def create(cls, device_host_port: str, encryption_key: str | bytes = "unregistered"):
@@ -211,11 +212,13 @@ class MitsubishiController:
 
     def get_unit_info(self) -> dict[str, Any]:
         """Get detailed unit information from the admin interface"""
-        unit_info = self.api.get_unit_info()
+        self.unit_info = self.api.get_unit_info()
         logger.debug(
-            f"✅ Unit info retrieved: {len(unit_info.get('adaptor_info', {}))} adaptor fields, {len(unit_info.get('unit_info', {}))} unit fields"
+            f"✅ Unit info retrieved: "
+            f"{len(self.unit_info.get('Adaptor Information', {}))} adaptor fields, "
+            f"{len(self.unit_info.get('Unit Info', {}))} unit fields"
         )
-        return unit_info
+        return self.unit_info
 
     def get_status_summary(self) -> dict[str, Any]:
         """Get human-readable status summary"""

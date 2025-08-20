@@ -21,6 +21,130 @@ from .test_fixtures import (
     TEMPERATURE_TEST_CASES,
 )
 
+UNIT_INFO_EXAMPLE = """
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+ <html>
+   <head>
+     <meta charset="UTF-8">
+     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+     <link rel="stylesheet" href="common.css" />
+     <title>Information</title>
+   </head>
+   <body>
+   <form name="form" method="get" action="unitinfo">
+     <div class="all">
+       <div class="titleA">Adaptor Information</div>
+       <div class="itemA lineA">
+         <dl>
+           <dt>Adaptor name</dt>
+             <dd>MAC-577IF-E</dd>
+         </dl>
+         <dl>
+           <dt>Application version</dt>
+             <dd>33.00</dd>
+         </dl>
+         <dl>
+           <dt>Release version</dt>
+             <dd>00.06</dd>
+         </dl>
+         <dl>
+           <dt>Flash version</dt>
+             <dd>00.01</dd>
+         </dl>
+         <dl>
+           <dt>Boot version</dt>
+             <dd>00.01</dd>
+         </dl>
+         <dl>
+           <dt>Common platform version</dt>
+             <dd>01.08</dd>
+         </dl>
+         <dl>
+           <dt>Test release version</dt>
+             <dd>00.00</dd>
+         </dl>
+         <dl>
+           <dt>MAC address</dt>
+             <dd>00:11:22:33:44:55</dd>
+         </dl>
+         <dl>
+           <dt>ID</dt>
+             <dd>1234567890</dd>
+         </dl>
+         <dl>
+           <dt>Manufacturing date</dt>
+             <dd>1970/01/01</dd>
+         </dl>
+         <dl>
+           <dt>Current time</dt>
+             <dd>2001/01/01 00:03:50</dd>
+         </dl>
+         <dl>
+           <dt>Channel</dt>
+             <dd>6</dd>
+         </dl>
+         <dl>
+           <dt>RSSI</dt>
+             <dd>-43dBm</dd>
+         </dl>
+         <dl>
+           <dt>IT communication status</dt>
+             <dd>Normal</dd>
+         </dl>
+         <dl>
+           <dt>Server operation</dt>
+             <dd>ON</dd>
+         </dl>
+         <dl>
+           <dt>Server communication status</dt>
+             <dd>Error (DNS)</dd>
+         </dl>
+         <div style="display:none">
+           <dl>
+             <dt>Server communication status(HEMS)</dt>
+               <dd>--</dd>
+           </dl>
+         </div>
+         <dl>
+           <dt>SOI communication status</dt>
+             <dd>Unsupported</dd>
+         </dl>
+         <dl>
+           <dt>Thermal image timestamp</dt>
+             <dd>--</dd>
+         </dl>
+       </div>
+       <div class="titleA">Unit Information</div>
+       <div class="itemA lineA">
+         <dl>
+           <dt>Unit type</dt>
+             <dd>RAC</dd>
+         </dl>
+         <dl>
+           <dt>IT protocol version</dt>
+             <dd>03.00</dd>
+         </dl>
+         <dl>
+           <dt>Error</dt>
+             <dd>8000</dd>
+         </dl>
+       </div>
+       <div class="itemB">
+         <input class="btnA" type="submit" value="Reload">
+       </div>
+     </div>
+     </form>
+   </body>
+ </html>
+"""
+
+def test_unit_info():
+    api = MitsubishiAPI("localhost")
+    parsed_unit_info = api._parse_unit_info_html(UNIT_INFO_EXAMPLE)
+    assert parsed_unit_info["Adaptor Information"]["MAC address"] == "00:11:22:33:44:55"
+    assert parsed_unit_info["Adaptor Information"]["RSSI"] == -43
+    assert parsed_unit_info["Adaptor Information"]["Channel"] == 6
+
 
 class TestRealDeviceResponseParsing:
     """Test parsing of real device XML responses."""
@@ -148,10 +272,6 @@ class TestMitsubishiControllerIntegration:
 
     def test_status_summary_format(self):
         """Test that status summary matches expected format."""
-        # Set up controller state manually
-        self.controller.state.mac = "AA:BB:CC:DD:EE:FF"
-        self.controller.state.serial = "1234567890"
-
         # Mock a minimal state for testing
         with patch.object(self.controller, "state") as mock_state:
             mock_state.mac = "AA:BB:CC:DD:EE:FF"

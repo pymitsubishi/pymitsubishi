@@ -52,6 +52,8 @@ if args.horizontal_wind_direction:
     desired_state.horizontal_wind_direction = HorizontalWindDirection[args.horizontal_wind_direction.upper()]
     update_state["left_right_wind_direct"] = True
 
+print(ctrl.get_unit_info())
+
 if update_state:
     print("Updating state...")
     ctrl._send_general_control_command(desired_state, update_state)

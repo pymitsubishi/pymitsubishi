@@ -104,13 +104,13 @@ def test_parse_general_states_vertical_vane(data_hex, v_vane_l: VerticalWindDire
 @pytest.mark.parametrize(
     "data_hex, vane",
     [  #  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-        ("fc62013010020000010b070000000081b046000000d1", HorizontalWindDirection.L),
-        ("fc62013010020000010b070000000082b046000000d0", HorizontalWindDirection.LS),
-        ("fc62013010020000010b070000000083b046000000cf", HorizontalWindDirection.C),
-        ("fc62013010020000010b070000000084b046000000ce", HorizontalWindDirection.RS),
-        ("fc62013010020000010b070000000085b046000000cd", HorizontalWindDirection.R),
-        ("fc62013010020000010b070000000088b046000000ca", HorizontalWindDirection.LR),  # split
-        ("fc62013010020000010b07000000008cb046000000c6", HorizontalWindDirection.LCR_S),  # sweep
+        ("fc62013010020000010b070000000081b046000000d1", HorizontalWindDirection.FAR_LEFT),
+        ("fc62013010020000010b070000000082b046000000d0", HorizontalWindDirection.LEFT),
+        ("fc62013010020000010b070000000083b046000000cf", HorizontalWindDirection.CENTER),
+        ("fc62013010020000010b070000000084b046000000ce", HorizontalWindDirection.RIGHT),
+        ("fc62013010020000010b070000000085b046000000cd", HorizontalWindDirection.FAR_RIGHT),
+        ("fc62013010020000010b070000000088b046000000ca", HorizontalWindDirection.LEFT_RIGHT),  # split
+        ("fc62013010020000010b07000000008cb046000000c6", HorizontalWindDirection.SWING),  # sweep
     ],
 )
 def test_parse_general_states_horizontal_vane(data_hex, vane):
@@ -121,7 +121,7 @@ def test_parse_general_states_horizontal_vane(data_hex, vane):
 @pytest.mark.parametrize(
     "data_hex, h_vane, isee_h_vane",
     [  #  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-        ("fc62013010020000010b070000000083b046000000cf", HorizontalWindDirection.C, 0),  # off
+        ("fc62013010020000010b070000000083b046000000cf", HorizontalWindDirection.CENTER, 0),  # off
         ("fc62013010020000010b070000000080b046000100d1", HorizontalWindDirection.AUTO, 1),  # avoid person
         ("fc62013010020000010b070000000080b046000200d0", HorizontalWindDirection.AUTO, 2),  # aim at person
         ("fc62013010020000010b070000000080b046000000d2", HorizontalWindDirection.AUTO, 0),  # wide

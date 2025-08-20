@@ -31,11 +31,12 @@ class DriveMode(Enum):
 
 class WindSpeed(Enum):
     AUTO = 0
-    LEVEL_1 = 1
-    LEVEL_2 = 2
-    LEVEL_3 = 3
-    LEVEL_4 = 5
-    LEVEL_FULL = 6
+    S1 = 1
+    S2 = 2
+    S3 = 3
+    # value 4 does not seem to exist?
+    S4 = 5
+    FULL = 6
 
 
 class VerticalWindDirection(Enum):
@@ -50,16 +51,16 @@ class VerticalWindDirection(Enum):
 
 class HorizontalWindDirection(Enum):
     AUTO = 0
-    L = 1
-    LS = 2
-    C = 3
-    RS = 4
-    R = 5
-    LC = 6
-    CR = 7
-    LR = 8
-    LCR = 9
-    LCR_S = 12
+    FAR_LEFT = 1
+    LEFT = 2
+    CENTER = 3
+    RIGHT = 4
+    FAR_RIGHT = 5
+    LEFT_CENTER = 6
+    CENTER_RIGHT = 7
+    LEFT_RIGHT = 8
+    LEFT_CENTER_RIGHT = 9  # I don't see a difference in vane position vs 8
+    SWING = 12
 
 
 def log_unexpected_value(code_value: str, position: int, value: bytes):
@@ -89,6 +90,11 @@ class GeneralStates:
         if self.fine_temperature is not None:
             return self.fine_temperature
         return self.coarse_temperature
+
+    @temperature.setter
+    def temperature(self, value: float):
+        self.fine_temperature = value
+        self.coarse_temperature = int(value)
 
     @property
     def temp_mode(self) -> bool:

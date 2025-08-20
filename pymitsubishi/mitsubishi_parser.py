@@ -176,88 +176,65 @@ class GeneralStates:
 
         return obj
 
-    def generate_general_command(self, controls: dict[str, bool]) -> str:
-        """Generate general control command hex string"""
-        segments = {
-            "segment0": "01",
-            "segment1": "00",
-            "segment2": "00",
-            "segment3": "00",
-            "segment4": "00",
-            "segment5": "00",
-            "segment6": "00",
-            "segment7": "00",
-            "segment13": "00",
-            "segment14": "00",
-            "segment15": "00",
-        }
+    def generate_general_command(self, controls: dict[str, bool]) -> bytes:
+        cmd = bytearray(b"\x41\x01\x30\x10\x01")
+        cmd += b"\0" * 15
 
-        # Calculate segment 1 value (control flags)
-        segment1_value = 0
-        if controls.get("power_on_off"):
-            segment1_value |= 0x01
-        if controls.get("drive_mode"):
-            segment1_value |= 0x02
-        if controls.get("temperature"):
-            segment1_value |= 0x04
-        if controls.get("wind_speed"):
-            segment1_value |= 0x08
-        if controls.get("up_down_wind_direct"):
-            segment1_value |= 0x10
-
-        # Calculate segment 2 value
-        segment2_value = 0
-        if controls.get("left_right_wind_direct"):
-            segment2_value |= 0x01
-        if controls.get("outside_control", True):  # Default true
-            segment2_value |= 0x02
-
-        segments["segment1"] = f"{segment1_value:02x}"
-        segments["segment2"] = f"{segment2_value:02x}"
-        segments["segment3"] = f"{self.power_on_off.value:02x}"
-        drive_mode_isee = self.drive_mode.value + (0x08 if self.i_see_sensor else 0x00)
-        segments["segment4"] = f"{drive_mode_isee:02x}"
-        segments["segment6"] = f"{self.wind_speed.value:02x}"
-        segments["segment7"] = f"{self.vertical_wind_direction.value:02x}"
-        segments["segment13"] = f"{self.horizontal_wind_direction.value:02x}"
-        segments["segment15"] = "41"  # checkInside: 41 true, 42 false
-
-        segments["segment5"] = convert_temperature(self.temperature)
-        segments["segment14"] = convert_temperature_to_segment(self.temperature)
-
-        # Build payload
-        payload = "41013010"
-        for i in range(16):
-            segment_key = f"segment{i}"
-            payload += segments.get(segment_key, "00")
+        cmd[5] = (
+            0x01 if controls.get("power_on_off") else 0
+            + 0x02 if controls.get("drive_mode") else 0
+            + 0x04 if controls.get("temperature") else 0
+            + 0x08 if controls.get("wind_speed") else 0
+            + 0x10 if controls.get("up_down_wind_direct") else 0
+            # 0x20 ?
+            # 0x40 ?
+            # 0x80 ?
+        )
+        cmd[6] = (
+            0x01 if controls.get("left_right_wind_direct") else 0
+            + 0x02 if controls.get("outside_control", True) else 0
+            # other flags?
+        )
+        cmd[7] = self.power_on_off.value
+        cmd[8] = self.drive_mode.value + (0x08 if self.i_see_sensor else 0x00)
+        cmd[9] = 31 - int(self.temperature)
+        cmd[10] = self.wind_speed.value
+        cmd[11] = self.vertical_wind_direction.value
+        cmd[12] = 0
+        cmd[13] = 0
+        cmd[14] = 0
+        cmd[15] = 0
+        cmd[16] = 0
+        cmd[17] = self.horizontal_wind_direction.value
+        cmd[18] = 0x80 + int(self.fine_temperature * 2)
+        cmd[19] = 0x41
 
         # Calculate and append FCC
-        fcc = format(calc_fcc(bytes.fromhex(payload)), "02x")
-        return "fc" + payload + fcc
+        fcc = calc_fcc(cmd)
+        return b"\xfc" + cmd + bytes([fcc])
 
-    def generate_extend08_command(self, controls: dict[str, bool]) -> str:
-        """Generate extend08 command for buzzer, dehum, power saving, etc."""
-        segment_x_value = 0
-        if controls.get("dehum"):
-            segment_x_value |= 0x04
-        if controls.get("power_saving"):
-            segment_x_value |= 0x08
-        if controls.get("buzzer"):
-            segment_x_value |= 0x10
-        if controls.get("wind_and_wind_break"):
-            segment_x_value |= 0x20
-
-        segment_x = f"{segment_x_value:02x}"
-        segment_y = f"{self.dehum_setting:02x}" if controls.get("dehum") else "00"
-        segment_z = "0A" if self.is_power_saving else "00"
-        segment_a = f"{self.wind_and_wind_break_direct:02x}" if controls.get("wind_and_wind_break") else "00"
-        buzzer_segment = "01" if controls.get("buzzer") else "00"
-
-        payload = (
-            "4101301008" + segment_x + "0000" + segment_y + segment_z + segment_a + buzzer_segment + "0000000000000000"
+    def generate_extend08_command(self, controls: dict[str, bool]) -> bytes:
+        cmd = bytearray(b"\x41\x01\x30\x10\x08")
+        cmd += b"\0" * 15
+        cmd[5] = (
+            # 0x01?
+            # 0x02?
+            0x04 if controls.get("dehum") else 0
+            + 0x08 if controls.get("power_saving") else 0
+            + 0x10 if controls.get("buzzer") else 0
+            + 0x20 if controls.get("wind_and_wind_break") else 0
+            # 0x40?
+            # 0x80?
         )
-        fcc = format(calc_fcc(bytes.fromhex(payload)), "02x")
-        return "fc" + payload + fcc
+        # cmd[6:8] = 0
+        cmd[8] = self.dehum_setting if controls.get("dehum") else 0
+        cmd[9] = 0x0A if self.is_power_saving else 0x00
+        cmd[10] = self.wind_and_wind_break_direct if controls.get("wind_and_wind_break") else 0x00
+        cmd[11] = 0x01 if controls.get("buzzer") else 0x00
+        # cmd[12:20] = 0
+
+        fcc = calc_fcc(cmd)
+        return b"\xfc" + cmd + bytes([fcc])
 
 
 @dataclass

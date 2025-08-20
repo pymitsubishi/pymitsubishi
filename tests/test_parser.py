@@ -38,12 +38,12 @@ def test_fcc(payload, expected):
 
 def test_generate_general_command():
     cmd = GeneralStates().generate_general_command({})
-    assert cmd == "fc410130100100020008090000000000000000ac417d"
+    assert cmd == bytes.fromhex("fc410130100100020008090000000000000000ac417d")
 
 
 def test_generate_extend08_command():
     cmd = GeneralStates().generate_extend08_command({})
-    assert cmd == "fc410130100800000000000000000000000000000076"
+    assert cmd == bytes.fromhex("fc410130100800000000000000000000000000000076")
 
 
 class TestTemperatureConversion:

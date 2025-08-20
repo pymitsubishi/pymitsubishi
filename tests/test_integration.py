@@ -4,8 +4,8 @@ Integration tests for pymitsubishi using real device response data.
 These tests use sanitized data captured from actual Mitsubishi MAC-577IF-2E devices
 to ensure the library works correctly with real-world responses.
 """
-
 from unittest.mock import Mock, patch
+import xml.etree.ElementTree
 
 import pytest
 
@@ -140,8 +140,7 @@ class TestMitsubishiControllerIntegration:
         # Mock the API to return real XML data
         self.mock_api.send_status_request.return_value = REAL_DEVICE_XML_RESPONSE
 
-        success = self.controller.fetch_status()
-        assert success
+        self.controller.fetch_status()
 
         # Verify device info extraction
         assert self.controller.state.mac == "AA:BB:CC:DD:EE:FF"
@@ -186,11 +185,8 @@ class TestErrorHandling:
         with patch.object(api, "send_status_request") as mock_request:
             mock_request.return_value = "<invalid>xml<missing_close>"
 
-            # Should handle gracefully without crashing
-            success = controller.fetch_status()
-            # The controller returns True if response is received, but parsing may fail internally
-            # This is actually correct behavior - the method doesn't fail, it just logs the error
-            assert success
+            with pytest.raises(xml.etree.ElementTree.ParseError):
+                controller.fetch_status()
 
     def test_connection_timeout_handling(self):
         """Test handling of connection timeouts."""
@@ -201,9 +197,8 @@ class TestErrorHandling:
         with patch.object(api.session, "post") as mock_post:
             mock_post.side_effect = requests.exceptions.ConnectTimeout("Connection timeout")
 
-            # Should handle timeout gracefully by returning None
-            response = api.send_status_request()
-            assert response is None
+            with pytest.raises(requests.exceptions.ConnectTimeout):
+                api.send_status_request()
 
 
 class TestRealWorldScenarios:
@@ -218,8 +213,7 @@ class TestRealWorldScenarios:
         mock_api.send_status_request.return_value = REAL_DEVICE_XML_RESPONSE
 
         # Test status fetch
-        success = controller.fetch_status()
-        assert success
+        controller.fetch_status()
 
         # Mock successful control command
         mock_api.send_control_request.return_value = True

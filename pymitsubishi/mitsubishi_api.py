@@ -72,69 +72,63 @@ class MitsubishiAPI:
         # Combine IV and encrypted data, then base64 encode
         return base64.b64encode(iv + encrypted).decode("utf-8")
 
-    def decrypt_payload(self, payload_b64: str) -> str | None:
-        """Decrypt payload using direct byte manipulation"""
+    def decrypt_payload(self, payload_b64: str) -> str:
+        logger.debug(f"Base64 payload length: {len(payload_b64)}")
+
+        # Convert base64 directly to bytes
+        encrypted = base64.b64decode(payload_b64)  # may raise
+
+        # Extract IV and encrypted data
+        iv = encrypted[:KEY_SIZE]
+        encrypted_data = encrypted[KEY_SIZE:]
+
+        logger.debug(f"IV: {iv.hex()}")
+        logger.debug(f"Encrypted data length: {len(encrypted_data)}")
+
+        # Decrypt using AES CBC
+        cipher = AES.new(self.encryption_key, AES.MODE_CBC, iv)
+        decrypted = cipher.decrypt(encrypted_data)  # may raise, e.g. when invalid length
+
+        logger.debug(f"Decrypted raw length: {len(decrypted)}")
+
+        # Try to remove ISO 7816-4 padding first
         try:
-            # Convert base64 directly to bytes
-            encrypted = base64.b64decode(payload_b64)
+            decrypted_clean = unpad(decrypted, KEY_SIZE, "iso7816")
+        except ValueError:
+            # Fall back to removing zero padding if ISO padding fails
+            logger.debug("ISO 7816-4 unpadding failed, using zero padding removal")
+            decrypted_clean = decrypted.rstrip(b"\x00")
 
-            logger.debug(f"Base64 payload length: {len(payload_b64)}")
+        logger.debug(f"After padding removal length: {len(decrypted_clean)}")
 
-            # Extract IV and encrypted data
-            iv = encrypted[:KEY_SIZE]
-            encrypted_data = encrypted[KEY_SIZE:]
+        # Try to decode as UTF-8
+        try:
+            result: str = decrypted_clean.decode("utf-8")
+            logger.debug(f"Decrypted XML response: {result}")
+            return result
+        except UnicodeDecodeError as ude:
+            logger.debug(f"UTF-8 decode error at position {ude.start}: {ude.reason}")
 
-            logger.debug(f"IV: {iv.hex()}")
-            logger.debug(f"Encrypted data length: {len(encrypted_data)}")
+            # Try to find the actual end of the XML by looking for closing tags
+            xml_end_patterns = [b"</LSV>", b"</CSV>", b"</ESV>"]
+            for pattern in xml_end_patterns:
+                pos = decrypted_clean.find(pattern)
+                if pos != -1:
+                    end_pos = pos + len(pattern)
+                    truncated = decrypted_clean[:end_pos]
+                    logger.debug(f"Found XML end pattern {pattern.decode('utf-8')} at position {pos}")
+                    try:
+                        truncated_result: str = truncated.decode("utf-8")
+                        return truncated_result
+                    except UnicodeDecodeError:
+                        continue
 
-            # Decrypt using AES CBC
-            cipher = AES.new(self.encryption_key, AES.MODE_CBC, iv)
-            decrypted = cipher.decrypt(encrypted_data)
+            # If no valid XML end found, try errors='ignore'
+            fallback_result: str = decrypted_clean.decode("utf-8", errors="ignore")
+            logger.debug(f"Using errors='ignore', result length: {len(fallback_result)}")
+            return fallback_result
 
-            logger.debug(f"Decrypted raw length: {len(decrypted)}")
-
-            # Try to remove ISO 7816-4 padding first
-            try:
-                decrypted_clean = unpad(decrypted, KEY_SIZE, "iso7816")
-            except ValueError:
-                # Fall back to removing zero padding if ISO padding fails
-                decrypted_clean = decrypted.rstrip(b"\x00")
-                logger.debug("ISO 7816-4 unpadding failed, using zero padding removal")
-
-            logger.debug(f"After padding removal length: {len(decrypted_clean)}")
-
-            # Try to decode as UTF-8
-            try:
-                result: str = decrypted_clean.decode("utf-8")
-                logger.debug(f"Decrypted XML response: {result}")
-                return result
-            except UnicodeDecodeError as ude:
-                logger.debug(f"UTF-8 decode error at position {ude.start}: {ude.reason}")
-
-                # Try to find the actual end of the XML by looking for closing tags
-                xml_end_patterns = [b"</LSV>", b"</CSV>", b"</ESV>"]
-                for pattern in xml_end_patterns:
-                    pos = decrypted_clean.find(pattern)
-                    if pos != -1:
-                        end_pos = pos + len(pattern)
-                        truncated = decrypted_clean[:end_pos]
-                        logger.debug(f"Found XML end pattern {pattern.decode('utf-8')} at position {pos}")
-                        try:
-                            truncated_result: str = truncated.decode("utf-8")
-                            return truncated_result
-                        except UnicodeDecodeError:
-                            continue
-
-                # If no valid XML end found, try errors='ignore'
-                fallback_result: str = decrypted_clean.decode("utf-8", errors="ignore")
-                logger.debug(f"Using errors='ignore', result length: {len(fallback_result)}")
-                return fallback_result
-
-        except Exception as e:
-            logger.error(f"Decryption error: {e}")
-            return None
-
-    def make_request(self, payload_xml: str) -> str | None:
+    def make_request(self, payload_xml: str) -> str:
         """Make HTTP request to the /smart endpoint"""
         # Encrypt the XML payload
         encrypted_payload = self.encrypt_payload(payload_xml)
@@ -157,73 +151,56 @@ class MitsubishiAPI:
 
         url = f"http://{self.device_host_port}/smart"
 
-        try:
-            response = self.session.post(url, data=request_body, headers=headers, timeout=2)
+        response = self.session.post(url, data=request_body, headers=headers, timeout=2)  # may raise
+        response.raise_for_status()  # may raise
 
-            if response.status_code == 200:
-                logger.debug("Response Text:")
-                logger.debug(response.text)
-                try:
-                    root = ET.fromstring(response.text)
-                    encrypted_response = root.text
-                    if encrypted_response:
-                        decrypted = self.decrypt_payload(encrypted_response)
-                        return decrypted
-                except ET.ParseError as e:
-                    logger.error(f"XML parsing error: {e}")
+        logger.debug("Response Text:")
+        logger.debug(response.text)
+        root = ET.fromstring(response.text)  # may raise
+        encrypted_response = root.text
+        if encrypted_response:
+            decrypted = self.decrypt_payload(encrypted_response)
+            return decrypted
+        else:
+            raise RuntimeError(f"Could not find any text in response")
 
-            return None
-
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Request error: {e}")
-            return None
-
-    def send_reboot_request(self) -> str | None:
+    def send_reboot_request(self) -> str:
         return self.make_request("<CSV><RESET></RESET></CSV>")
 
-    def send_status_request(self) -> str | None:
+    def send_status_request(self) -> str:
         """Send a status request to get current device state"""
         payload_xml = "<CSV><CONNECT>ON</CONNECT></CSV>"
         return self.make_request(payload_xml)
 
-    def send_echonet_enable(self) -> str | None:
+    def send_echonet_enable(self) -> str:
         """Send ECHONET enable command"""
         payload_xml = "<CSV><CONNECT>ON</CONNECT><ECHONET>ON</ECHONET></CSV>"
         return self.make_request(payload_xml)
 
-    def send_command(self, command: bytes) -> str | None:
+    def send_command(self, command: bytes) -> str:
         return self.send_hex_command(command.hex())
 
-    def send_hex_command(self, hex_command: str) -> str | None:
+    def send_hex_command(self, hex_command: str) -> str:
         payload_xml = f"<CSV><CONNECT>ON</CONNECT><CODE><VALUE>{hex_command}</VALUE></CODE></CSV>"
         return self.make_request(payload_xml)
 
-    def get_unit_info(self, admin_password: str | None = None) -> dict[str, Any] | None:
+    def get_unit_info(self) -> dict[str, Any]:
         """Get unit information from the /unitinfo endpoint using admin credentials"""
-        try:
-            url = f"http://{self.device_host_port}/unitinfo"
-            # Use provided password or fall back to instance default
-            password = admin_password or self.admin_password
-            auth = HTTPBasicAuth(self.admin_username, password)
+        url = f"http://{self.device_host_port}/unitinfo"
+        auth = HTTPBasicAuth(self.admin_username, self.admin_password)
 
-            logger.debug(f"Fetching unit info from {url}")
+        logger.debug(f"Fetching unit info from {url}")
 
-            response = self.session.get(url, auth=auth, timeout=2)
+        response = self.session.get(url, auth=auth, timeout=2)  # may raise
+        response.raise_for_status()
 
-            if response.status_code == 200:
-                logger.debug(f"Unit info HTML response received ({len(response.text)} chars)")
+        logger.debug(f"Unit info HTML response received ({len(response.text)} chars)")
 
-                # Parse the HTML response to extract unit information
-                return self._parse_unit_info_html(response.text)
-            else:
-                logger.debug(f"Unit info request failed with status {response.status_code}")
-                return None
+        # Parse the HTML response to extract unit information
+        return self._parse_unit_info_html(response.text)
 
-        except requests.exceptions.RequestException as e:
-            logger.debug(f"Unit info request error: {e}")
-            return None
-
-    def _parse_unit_info_html(self, html_content: str) -> dict[str, Any]:
+    @staticmethod
+    def _parse_unit_info_html(html_content: str) -> dict[str, Any]:
         """Parse unit info HTML response to extract structured data"""
         unit_info: dict[str, Any] = {"adaptor_info": {}, "unit_info": {}}
 

@@ -38,54 +38,45 @@ class MitsubishiController:
         api = MitsubishiAPI(device_host_port=device_host_port, encryption_key=encryption_key)
         return cls(api)
 
-    def fetch_status(self) -> bool:
+    def fetch_status(self) -> ParsedDeviceState:
         """Fetch current device status and optionally detect capabilities"""
-        response = self.api.send_status_request()
-        if response:
-            self._parse_status_response(response)
-            return True
-        return False
+        response = self.api.send_status_request()  # may raise
+        self._parse_status_response(response)
+        return self.state
 
     def _parse_status_response(self, response: str):
         """Parse the device status response and update state"""
-        try:
-            # Parse the XML response
-            root = ET.fromstring(response)
+        # Parse the XML response
+        root = ET.fromstring(response)  # may raise
 
-            # Extract code values for parsing
-            code_values_elems = root.findall(".//CODE/VALUE")
-            code_values = [elem.text for elem in code_values_elems if elem.text]
+        # Extract code values for parsing
+        code_values_elems = root.findall(".//CODE/VALUE")
+        code_values = [elem.text for elem in code_values_elems if elem.text]
 
-            # Use the parser module to get structured state
-            parsed_state = ParsedDeviceState.parse_code_values(code_values)
+        # Use the parser module to get structured state
+        parsed_state = ParsedDeviceState.parse_code_values(code_values)
 
-            if parsed_state:
-                self.state = parsed_state
+        if parsed_state:
+            self.state = parsed_state
 
-            # Extract and set device identity
-            mac_elem = root.find(".//MAC")
-            if mac_elem is not None and mac_elem.text is not None:
-                self.state.mac = mac_elem.text
+        # Extract and set device identity
+        mac_elem = root.find(".//MAC")
+        if mac_elem is not None and mac_elem.text is not None:
+            self.state.mac = mac_elem.text
 
-            serial_elem = root.find(".//SERIAL")
-            if serial_elem is not None and serial_elem.text is not None:
-                self.state.serial = serial_elem.text
+        serial_elem = root.find(".//SERIAL")
+        if serial_elem is not None and serial_elem.text is not None:
+            self.state.serial = serial_elem.text
 
-            profile_elems = root.findall(".//PROFILECODE/DATA/VALUE") or root.findall(".//PROFILECODE/VALUE")
-            self.profile_code = []
-            for elem in profile_elems:
-                if elem.text:
-                    self.profile_code.append(bytes.fromhex(elem.text))
+        profile_elems = root.findall(".//PROFILECODE/DATA/VALUE") or root.findall(".//PROFILECODE/VALUE")
+        self.profile_code = []
+        for elem in profile_elems:
+            if elem.text:
+                self.profile_code.append(bytes.fromhex(elem.text))
 
-        except ET.ParseError as e:
-            logger.error(f"Error parsing status response: {e}")
-
-    def _check_state_available(self) -> bool:
-        """Check if device state is available"""
+    def _ensure_state_available(self):
         if not self.state.general:
-            logger.warning("No device state available. Fetch status first.")
-            return False
-        return True
+            self.fetch_status()
 
     def _create_updated_state(self, **overrides) -> GeneralStates:
         """Create updated state with specified field overrides"""
@@ -112,100 +103,87 @@ class MitsubishiController:
             ),
         )
 
-    def set_power(self, power_on: bool) -> bool:
+    def set_power(self, power_on: bool) -> ParsedDeviceState:
         """Set power on/off"""
-        if not self._check_state_available():
-            return False
+        self._ensure_state_available()
 
         new_power = PowerOnOff.ON if power_on else PowerOnOff.OFF
         updated_state = self._create_updated_state(power_on_off=new_power)
-        return self._send_general_control_command(updated_state, {"power_on_off": True})
+        new_state = self._send_general_control_command(updated_state, {"power_on_off": True})
+        self.state = new_state
+        return new_state
 
-    def set_temperature(self, temperature_celsius: float) -> bool:
+    def set_temperature(self, temperature_celsius: float) -> ParsedDeviceState:
         """Set target temperature in Celsius"""
-        if not self._check_state_available():
-            return False
+        self._ensure_state_available()
 
-        # Convert to 0.1°C units and validate range
-        temp_units = int(temperature_celsius * 10)
-        if temp_units < 160 or temp_units > 320:  # 16°C to 32°C
-            logger.warning(f"Temperature {temperature_celsius}°C is out of range (16-32°C)")
-            return False
+        updated_state = self._create_updated_state(temperature=temperature_celsius)
+        new_state = self._send_general_control_command(updated_state, {"temperature": True})
+        self.state = new_state
+        return new_state
 
-        updated_state = self._create_updated_state(temperature=temp_units)
-        return self._send_general_control_command(updated_state, {"temperature": True})
-
-    def set_mode(self, mode: DriveMode) -> bool:
+    def set_mode(self, mode: DriveMode) -> ParsedDeviceState:
         """Set operating mode"""
-        if not self._check_state_available():
-            return False
+        self._ensure_state_available()
 
         updated_state = self._create_updated_state(drive_mode=mode)
-        return self._send_general_control_command(updated_state, {"drive_mode": True})
+        new_state = self._send_general_control_command(updated_state, {"drive_mode": True})
+        self.state = new_state
+        return new_state
 
-    def set_fan_speed(self, speed: WindSpeed) -> bool:
+    def set_fan_speed(self, speed: WindSpeed) -> ParsedDeviceState:
         """Set fan speed"""
-        if not self._check_state_available():
-            return False
+        self._ensure_state_available()
 
         updated_state = self._create_updated_state(wind_speed=speed)
-        return self._send_general_control_command(updated_state, {"wind_speed": True})
+        new_state = self._send_general_control_command(updated_state, {"wind_speed": True})
+        self.state = new_state
+        return new_state
 
-    def set_vertical_vane(self, direction: VerticalWindDirection, side: str = "right") -> bool:
+    def set_vertical_vane(self, direction: VerticalWindDirection) -> ParsedDeviceState:
         """Set vertical vane direction (right or left side)"""
-        if not self._check_state_available():
-            return False
+        self._ensure_state_available()
 
-        if side.lower() not in ["right", "left"]:
-            logger.warning("Side must be 'right' or 'left'")
-            return False
+        updated_state = self._create_updated_state(vertical_wind_direction=direction)
+        new_state = self._send_general_control_command(updated_state, {"up_down_wind_direct": True})
+        self.state = new_state
+        return new_state
 
-        if side.lower() == "right":
-            updated_state = self._create_updated_state(vertical_wind_direction_right=direction)
-        else:
-            updated_state = self._create_updated_state(vertical_wind_direction_left=direction)
-
-        return self._send_general_control_command(updated_state, {"up_down_wind_direct": True})
-
-    def set_horizontal_vane(self, direction: HorizontalWindDirection) -> bool:
+    def set_horizontal_vane(self, direction: HorizontalWindDirection) -> ParsedDeviceState:
         """Set horizontal vane direction"""
-        if not self._check_state_available():
-            return False
+        self._ensure_state_available()
 
         updated_state = self._create_updated_state(horizontal_wind_direction=direction)
-        return self._send_general_control_command(updated_state, {"left_right_wind_direct": True})
+        new_state = self._send_general_control_command(updated_state, {"left_right_wind_direct": True})
+        self.state = new_state
+        return new_state
 
-    def set_dehumidifier(self, setting: int) -> bool:
+    def set_dehumidifier(self, setting: int) -> ParsedDeviceState:
         """Set dehumidifier level (0-100)"""
-        if not self._check_state_available():
-            return False
-
-        if setting < 0 or setting > 100:
-            logger.warning("Dehumidifier setting must be between 0-100")
-            return False
+        self._ensure_state_available()
 
         updated_state = self._create_updated_state(dehum_setting=setting)
-        return self._send_extend08_command(updated_state, {"dehum": True})
+        new_state = self._send_extend08_command(updated_state, {"dehum": True})
+        self.state = new_state
+        return new_state
 
-    def set_power_saving(self, enabled: bool) -> bool:
+    def set_power_saving(self, enabled: bool) -> ParsedDeviceState:
         """Enable or disable power saving mode"""
-        if not self._check_state_available():
-            return False
+        self._ensure_state_available()
 
         updated_state = self._create_updated_state(is_power_saving=enabled)
-        return self._send_extend08_command(updated_state, {"power_saving": True})
+        new_state = self._send_extend08_command(updated_state, {"power_saving": True})
+        self.state = new_state
+        return new_state
 
-    def send_buzzer_command(self, enabled: bool = True) -> bool:
+    def send_buzzer_command(self, enabled: bool = True) -> ParsedDeviceState:
         """Send buzzer control command"""
-        if not self._check_state_available():
-            return False
+        self._ensure_state_available()
+        new_state = self._send_extend08_command(self.state.general, {"buzzer": enabled})
+        self.state = new_state
+        return new_state
 
-        if not self.state.general:
-            return False
-
-        return self._send_extend08_command(self.state.general, {"buzzer": enabled})
-
-    def _send_general_control_command(self, state: GeneralStates, controls: dict[str, bool]) -> bool:
+    def _send_general_control_command(self, state: GeneralStates, controls: dict[str, bool]) -> ParsedDeviceState:
         """Send a general control command to the device"""
         # Generate the hex command
         hex_command = state.generate_general_command(controls).hex()
@@ -213,17 +191,10 @@ class MitsubishiController:
         logger.debug(f"🔧 Sending command: {hex_command}")
 
         response = self.api.send_hex_command(hex_command)
+        self._parse_status_response(response)
+        return self.state
 
-        if response:
-            logger.debug("✅ Command sent successfully")
-            # Update our local state to reflect the change
-            self.state.general = state
-            return True
-        else:
-            logger.debug("❌ Command failed")
-            return False
-
-    def _send_extend08_command(self, state: GeneralStates, controls: dict[str, bool]) -> bool:
+    def _send_extend08_command(self, state: GeneralStates, controls: dict[str, bool]) -> ParsedDeviceState:
         """Send an extend08 command for advanced features"""
         # Generate the hex command
         hex_command = state.generate_extend08_command(controls).hex()
@@ -231,30 +202,19 @@ class MitsubishiController:
         logger.debug(f"🔧 Sending extend08 command: {hex_command}")
 
         response = self.api.send_hex_command(hex_command)
+        self._parse_status_response(response)
+        return self.state
 
-        if response:
-            logger.debug("✅ Extend08 command sent successfully")
-            # Update our local state to reflect the change
-            self.state.general = state
-            return True
-        else:
-            logger.debug("❌ Extend08 command failed")
-            return False
-
-    def enable_echonet(self) -> bool:
+    def enable_echonet(self) -> None:
         """Send ECHONET enable command"""
-        response = self.api.send_echonet_enable()
-        return response is not None
+        self.api.send_echonet_enable()
 
-    def get_unit_info(self) -> dict[str, Any] | None:
+    def get_unit_info(self) -> dict[str, Any]:
         """Get detailed unit information from the admin interface"""
         unit_info = self.api.get_unit_info()
-
-        if unit_info:
-            logger.debug(
-                f"✅ Unit info retrieved: {len(unit_info.get('adaptor_info', {}))} adaptor fields, {len(unit_info.get('unit_info', {}))} unit fields"
-            )
-
+        logger.debug(
+            f"✅ Unit info retrieved: {len(unit_info.get('adaptor_info', {}))} adaptor fields, {len(unit_info.get('unit_info', {}))} unit fields"
+        )
         return unit_info
 
     def get_status_summary(self) -> dict[str, Any]:

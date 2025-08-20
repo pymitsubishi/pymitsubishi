@@ -34,11 +34,11 @@ api = MitsubishiAPI(device_host_port="192.168.1.100")
 controller = MitsubishiController(api=api)
 
 # Fetch device status
-if controller.fetch_status():
-    summary = controller.get_status_summary()
-    print(f"Power: {summary['power']}")
-    print(f"Temperature: {summary['target_temp']}°C")
-    print(f"Mode: {summary['mode']}")
+controller.fetch_status()
+summary = controller.get_status_summary()
+print(f"Power: {summary['power']}")
+print(f"Temperature: {summary['target_temp']}°C")
+print(f"Mode: {summary['mode']}")
 
 # Control the device
 controller.set_power(True)

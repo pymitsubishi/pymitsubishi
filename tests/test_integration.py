@@ -10,7 +10,6 @@ from unittest.mock import Mock, patch
 import pytest
 
 from pymitsubishi import MitsubishiAPI, MitsubishiController
-from pymitsubishi.mitsubishi_capabilities import CapabilityDetector
 from pymitsubishi.mitsubishi_parser import DriveMode, PowerOnOff, WindSpeed
 
 from .test_fixtures import (
@@ -188,41 +187,6 @@ class TestMitsubishiControllerIntegration:
             assert "serial" in summary
             assert "power" in summary
             assert "mode" in summary
-
-
-class TestCapabilityDetectionIntegration:
-    """Integration tests for capability detection with real data."""
-
-    def setup_method(self):
-        """Set up test fixtures."""
-        self.mock_api = Mock()
-        self.detector = CapabilityDetector(self.mock_api)
-
-    def test_profile_code_capability_detection(self):
-        """Test capability detection with real ProfileCode data."""
-        # Mock API response with real XML
-        self.mock_api.send_status_request.return_value = REAL_DEVICE_XML_RESPONSE
-
-        # Test individual ProfileCode validation (without using analyzer that expects different format)
-        for i, profile_code in enumerate(SAMPLE_PROFILE_CODES[:2]):  # Test first 2
-            data = bytes.fromhex(profile_code)
-            assert len(data) == 32  # Real profile codes are 32 bytes
-
-            # Verify basic structure
-            if i == 0:
-                # First profile should have actual data
-                assert not all(byte == 0 for byte in data)
-
-    def test_group_code_detection(self):
-        """Test group code detection with real code values."""
-        # Simulate group code extraction using correct position
-        for code_value in SAMPLE_CODE_VALUES:
-            if len(code_value) >= 22:
-                group_code = code_value[20:22]  # Correct position for our format
-                self.detector.capabilities.supported_group_codes.add(group_code)
-
-        expected_codes = {"02", "03", "04", "05", "06", "07", "08", "09", "0a"}
-        assert self.detector.capabilities.supported_group_codes == expected_codes
 
 
 class TestErrorHandling:

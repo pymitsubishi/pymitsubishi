@@ -15,7 +15,6 @@ For Home Assistant users, check out our official integration: [homeassistant-mit
 
 - **Device Control**: Power, temperature, mode, fan speed, and vane direction control
 - **Status Monitoring**: Real-time device status, temperatures, and error states
-- **Capability Detection**: Dynamic detection of device capabilities using ProfileCode analysis
 - **Group Code Analysis**: Advanced protocol analysis for enhanced device understanding
 - **Encryption Support**: Full support for Mitsubishi's encryption protocol
 
@@ -50,39 +49,6 @@ controller.set_mode(DriveMode.COOLER)
 api.close()
 ```
 
-## Advanced Usage
-
-### Capability Detection
-
-```python
-from pymitsubishi import CapabilityDetector
-
-detector = CapabilityDetector(api=api)
-capabilities = detector.detect_all_capabilities(debug=True)
-
-# Check specific capabilities
-if capabilities.has_capability(CapabilityType.OUTDOOR_TEMPERATURE_SENSOR):
-    print("Device has outdoor temperature sensor")
-
-# Save capabilities for later use
-detector.save_capabilities("device_capabilities.json")
-```
-
-### ProfileCode Analysis
-
-The library automatically analyzes ProfileCode data from device responses to detect capabilities and device characteristics:
-
-```python
-# Fetch status with capability detection
-controller.fetch_status(detect_capabilities=True)
-
-# Access detected capabilities
-summary = controller.get_status_summary()
-if 'capabilities' in summary:
-    for cap_name, cap_info in summary['capabilities'].items():
-        print(f"{cap_name}: {cap_info['supported']}")
-```
-
 ## API Reference
 
 ### MitsubishiAPI
@@ -92,10 +58,6 @@ Core communication class handling encryption and HTTP requests.
 ### MitsubishiController
 
 High-level control interface for device operations.
-
-### CapabilityDetector
-
-Advanced capability detection using ProfileCode and group code analysis.
 
 ### Data Classes
 

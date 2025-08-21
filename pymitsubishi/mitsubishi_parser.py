@@ -241,10 +241,10 @@ class GeneralStates:
 class SensorStates:
     """Parsed sensor states from device response"""
 
-    inside_temperature_1_coarse: int = 22
+    inside_temperature_1_coarse: int = 24
     outside_temperature: float = 21.0
-    inside_temperature_1_fine: float = 22.0
-    inside_temperature_2: float = 22.0
+    inside_temperature_1_fine: float = 24.5
+    inside_temperature_2: float = 24.0
     runtime_minutes: int = 0
 
     @property

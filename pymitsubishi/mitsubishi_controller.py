@@ -76,7 +76,7 @@ class MitsubishiController:
                 self.profile_code.append(bytes.fromhex(elem.text))
 
     def _ensure_state_available(self):
-        if not self.state.general:
+        if self.state is None or self.state.general is None:
             self.fetch_status()
 
     def _create_updated_state(self, **overrides) -> GeneralStates:

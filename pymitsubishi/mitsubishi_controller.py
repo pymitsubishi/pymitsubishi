@@ -133,7 +133,7 @@ class MitsubishiController:
         # But setting 0xb for cooler+isee doesn't work either
         # Special case "auto" here:
         if mode == DriveMode.AUTO:
-            mode = 0x8
+            mode = mode.value | 8
 
         updated_state = self._create_updated_state(drive_mode=mode)
         new_state = self._send_general_control_command(updated_state, {"drive_mode": True})

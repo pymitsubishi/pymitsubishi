@@ -216,8 +216,8 @@ class GeneralStates:
             # other flags?
         )
         cmd[7] = self.power_on_off.value
-        cmd[8] = (self.drive_mode.value if isinstance(self.drive_mode, DriveMode) else self.drive_mode) \
-                 | (0x08 if self.i_see_sensor else 0x00)
+        cmd[8] = self.drive_mode.value if isinstance(self.drive_mode, DriveMode) else self.drive_mode
+        # TODO: figure out how to combine mode with iSee; Mode changes don't seem to work when >0x08
         cmd[9] = 31 - int(self.temperature)
         cmd[10] = self.wind_speed.value
         cmd[11] = self.vertical_wind_direction.value

@@ -114,6 +114,8 @@ class TestCodeValueParsing:
             assert hasattr(parsed_state.general, "drive_mode")
             assert hasattr(parsed_state.general, "temperature")
 
+        d = parsed_state.as_dict()
+
 
 class TestProfileCodeAnalysis:
     """Test ProfileCode analysis with real profile data."""

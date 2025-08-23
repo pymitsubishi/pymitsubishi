@@ -8,7 +8,7 @@ including enums, state classes, and functions for decoding hex values.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import dataclasses
 from enum import Enum
 import logging
 from typing import Any
@@ -85,7 +85,7 @@ def try_enum_or_log(code_value: str, position: int, value: int, enum_class: type
         return value
 
 
-@dataclass
+@dataclasses.dataclass
 class GeneralStates:
     """Parsed general AC states from device response"""
 
@@ -258,7 +258,7 @@ class GeneralStates:
         return b"\xfc" + cmd + bytes([fcc])
 
 
-@dataclass
+@dataclasses.dataclass
 class SensorStates:
     """Parsed sensor states from device response"""
 
@@ -332,7 +332,7 @@ class SensorStates:
         return obj
 
 
-@dataclass
+@dataclasses.dataclass
 class EnergyStates:
     """Parsed energy and operational states from device response"""
 
@@ -398,7 +398,7 @@ class EnergyStates:
         return obj
 
 
-@dataclass
+@dataclasses.dataclass
 class ErrorStates:
     """Parsed error states from device response"""
 
@@ -450,7 +450,7 @@ class ErrorStates:
         return obj
 
 
-@dataclass
+@dataclasses.dataclass
 class Unknown5States:
     @staticmethod
     def is_unknown5_states_payload(data: bytes) -> bool:
@@ -489,7 +489,7 @@ class Unknown5States:
         return obj
 
 
-@dataclass
+@dataclasses.dataclass
 class AutoStates:
     power_mode: int = 0
     auto_mode: AutoMode = AutoMode.OFF
@@ -547,7 +547,7 @@ class AutoStates:
         return obj
 
 
-@dataclass
+@dataclasses.dataclass
 class ParsedDeviceState:
     """Complete parsed device state combining all state types"""
 
@@ -590,6 +590,10 @@ class ParsedDeviceState:
                 logger.debug(f"Ignoring unknown code value: {value.hex()}")
 
         return parsed_state
+
+    def as_dict(self) -> dict[str, Any]:
+        return dataclasses.asdict(self)
+
 
 def calc_fcc(payload: bytes) -> int:
     """Calculate FCC checksum for Mitsubishi protocol payload"""

@@ -319,8 +319,12 @@ class SensorStates:
         # but they seem to move exactly together
         # data[12] moves differently and seems to lead vs data[8]/data[11]
 
-        if data[13:15] != b"\xFE\x42":
-            log_unexpected_value(cls.__name__, 13, data[13:15])
+        if data[13] != 0xfe:
+            # also seen: 0x00
+            log_unexpected_value(cls.__name__, 13, data[13])
+
+        if data[14] != 0x42:
+            log_unexpected_value(cls.__name__, 14, data[14])
 
         obj.runtime_minutes = int.from_bytes(data[15:19], 'big', signed=False)
         # runtime is at least 24 bit long data[16:19]
@@ -590,9 +594,6 @@ class ParsedDeviceState:
                 logger.debug(f"Ignoring unknown code value: {value.hex()}")
 
         return parsed_state
-
-    def as_dict(self) -> dict[str, Any]:
-        return dataclasses.asdict(self)
 
 
 def calc_fcc(payload: bytes) -> int:

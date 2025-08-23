@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 class MitsubishiController:
     """Business logic controller for Mitsubishi AC devices"""
     wait_time_after_command = 5  # Number of seconds after a command that the result is visible in the returned status
+    # Found experimentally by increasing until I reliably saw my updates
 
     def __init__(self, api: MitsubishiAPI):
         self.api = api

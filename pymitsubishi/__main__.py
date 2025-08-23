@@ -22,6 +22,8 @@ parser.add_argument("--vertical-wind-direction", help="Set vertical vane positio
                     type=lambda s: s.upper(), choices=[_.name for _ in VerticalWindDirection])
 parser.add_argument("--horizontal-wind-direction", help="Set horizontal vane position",
                     type=lambda s: s.upper(), choices=[_.name for _ in HorizontalWindDirection])
+parser.add_argument("--power-saving", help="Set power saving",
+                    type=lambda s: s.upper(), choices=["ON", "OFF"])
 args = parser.parse_args()
 
 logging.basicConfig(level=logging.WARNING - 10 * args.verbose)
@@ -56,6 +58,11 @@ if args.horizontal_wind_direction:
     _ = HorizontalWindDirection[args.horizontal_wind_direction.upper()]
     print("Setting horizontal wind direction to {}".format(_))
     ctrl.set_horizontal_vane(_)
+    update_state = True
+if args.power_saving:
+    _ = args.power_saving.upper() == "ON"
+    print("Setting power saving to {}".format(_))
+    ctrl.set_power_saving(_)
     update_state = True
 if args.power:
     # Keep power for last, so we can configure the unit correctly before switching on

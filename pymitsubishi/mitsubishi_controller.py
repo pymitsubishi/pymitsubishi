@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 class MitsubishiController:
     """Business logic controller for Mitsubishi AC devices"""
+    wait_time_after_command = 5  # Number of seconds after a command that the result is visible in the returned status
 
     def __init__(self, api: MitsubishiAPI):
         self.api = api
@@ -127,6 +128,12 @@ class MitsubishiController:
         """Set operating mode"""
         self._ensure_state_available()
 
+        # Setting mode 0 for auto doesn't seem to work
+        # But setting 0xb for cooler+isee doesn't work either
+        # Special case "auto" here:
+        if mode == DriveMode.AUTO:
+            mode = 0x8
+
         updated_state = self._create_updated_state(drive_mode=mode)
         new_state = self._send_general_control_command(updated_state, {"drive_mode": True})
         self.state = new_state
@@ -219,59 +226,3 @@ class MitsubishiController:
             f"{len(self.unit_info.get('Unit Info', {}))} unit fields"
         )
         return self.unit_info
-
-    def get_status_summary(self) -> dict[str, Any]:
-        """Get human-readable status summary"""
-        summary: dict[str, Any] = {
-            "mac": self.state.mac,
-            "serial": self.state.serial,
-        }
-
-        if self.state.general:
-            general_dict: dict[str, Any] = {
-                "power": self.state.general.power_on_off.name,
-                "mode": self.state.general.drive_mode.name,
-                "target_temp": self.state.general.temperature,
-                "fan_speed": self.state.general.wind_speed.name,
-                "dehumidifier_setting": self.state.general.dehum_setting,
-                "power_saving_mode": self.state.general.is_power_saving,
-                "vertical_vane": self.state.general.vertical_wind_direction.name,
-                "horizontal_vane": self.state.general.horizontal_wind_direction.name,
-            }
-            summary.update(general_dict)
-
-        if self.state.sensors:
-            sensor_dict: dict[str, Any] = {
-                "room_temp": self.state.sensors.room_temperature,
-                "outside_temp": self.state.sensors.outside_temperature,
-                "runtime_minutes": self.state.sensors.runtime_minutes,
-                "inside_temperature_1_coarse": self.state.sensors.inside_temperature_1_coarse,
-                "inside_temperature_1_fine": self.state.sensors.inside_temperature_1_fine,
-                "inside_temperature_2": self.state.sensors.inside_temperature_2,
-            }
-            summary.update(sensor_dict)
-
-        if self.state.energy:
-            summary.update({
-                "operating": self.state.energy.operating,
-                "power_watt": self.state.energy.power_watt,
-                "energy_kWh": self.state.energy.energy_hecto_watt_hour / 10.,
-            })
-
-        if self.state.errors:
-            error_dict: dict[str, Any] = {
-                "error_code": self.state.errors.error_code,
-                "error_state": self.state.errors.is_abnormal_state,
-            }
-            summary.update(error_dict)
-
-        if self.state._unknown5:
-            summary.update({
-            })
-
-        if self.state._unknown9:
-            summary.update({
-                "power_mode": self.state._unknown9.power_mode,
-            })
-
-        return summary

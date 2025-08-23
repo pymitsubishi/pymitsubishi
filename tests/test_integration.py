@@ -270,29 +270,6 @@ class TestMitsubishiControllerIntegration:
         assert self.controller.state.mac == "AA:BB:CC:DD:EE:FF"
         assert self.controller.state.serial == "1234567890"
 
-    def test_status_summary_format(self):
-        """Test that status summary matches expected format."""
-        # Mock a minimal state for testing
-        with patch.object(self.controller, "state") as mock_state:
-            mock_state.mac = "AA:BB:CC:DD:EE:FF"
-            mock_state.serial = "1234567890"
-            mock_state.general = Mock()
-            mock_state.general.power_on_off = PowerOnOff.ON
-            mock_state.general.drive_mode = DriveMode.COOLER
-            mock_state.general.temperature = 22.5
-            mock_state.general.wind_speed = WindSpeed.AUTO
-            mock_state.sensors = Mock()
-            mock_state.sensors.room_temperature = 22.0
-            mock_state.sensors.outside_temperature = 20.0
-
-            summary = self.controller.get_status_summary()
-
-            # Verify key fields are present
-            assert "mac" in summary
-            assert "serial" in summary
-            assert "power" in summary
-            assert "mode" in summary
-
 
 class TestErrorHandling:
     """Test error handling with realistic scenarios."""

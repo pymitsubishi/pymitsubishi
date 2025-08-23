@@ -63,9 +63,26 @@ class HorizontalWindDirection(Enum):
     SWING = 12
 
 
-def log_unexpected_value(code_value: str, position: int, value: bytes):
-    logger.warning(f"Unexpected value found in {code_value} at position {position}: {value.hex()}")
+class AutoMode(Enum):
+    OFF = 0
+    SWITCHING = 1
+    AUTO_HEATING = 2
+    AUTO_COOLING = 3
+
+
+def log_unexpected_value(code_value: str, position: int, value: int | bytes):
+    if isinstance(value, bytes):
+        value = "[" + value.hex() + "]"
+    logger.warning(f"Unexpected value found in {code_value} at position {position}: {value}")
     logger.warning(f"Please report this, so this can be added to the decoding.")
+
+
+def try_enum_or_log(code_value: str, position: int, value: int, enum_class: type):
+    try:
+        return enum_class(value)
+    except ValueError:
+        log_unexpected_value(code_value, position, value)
+        return value
 
 
 @dataclass
@@ -141,24 +158,25 @@ class GeneralStates:
         if data[6:8] != b"\0\0":
             log_unexpected_value(cls.__name__, 6, data[6:8])
 
-        obj.power_on_off = PowerOnOff(data[8])
+        obj.power_on_off = try_enum_or_log(cls.__name__, 8, data[8], PowerOnOff)
 
-        obj.drive_mode = DriveMode(data[9] & 0x07)
+        obj.drive_mode = try_enum_or_log(cls.__name__, 9, data[9] & 0x07, DriveMode)
         obj.i_see_sensor = bool(data[9] & 0x08)
-
         if data[9] & 0xF0 != 0x00:
             log_unexpected_value(cls.__name__, 9, data[9:10])
 
         obj.coarse_temperature = 31 - data[10]
-        obj.wind_speed = WindSpeed(data[11])  # data[6] in SwiCago
-        obj.vertical_wind_direction = VerticalWindDirection(data[12])  # data[7] in SwiCago
+        obj.wind_speed = try_enum_or_log(cls.__name__, 11, data[11], WindSpeed)
+        obj.vertical_wind_direction = try_enum_or_log(cls.__name__, 12, data[12], VerticalWindDirection)
 
         if data[13:15] != b"\0\0":
             log_unexpected_value(cls.__name__, 13, data[13:15])
 
         # Enhanced wide vane parsing with adjustment flag (SwiCago)
         wide_vane_data = data[15]  # data[10] in SwiCago
-        obj.horizontal_wind_direction = HorizontalWindDirection(wide_vane_data & 0x0F)  # Lower 4 bits
+        obj.horizontal_wind_direction = try_enum_or_log(
+            cls.__name__, 15,
+            wide_vane_data & 0x0F, HorizontalWindDirection)  # Lower 4 bits
         obj.wide_vane_adjustment = (wide_vane_data & 0xF0) == 0x80  # Upper 4 bits = 0x80
 
         if data[16] != 0x00:
@@ -180,6 +198,8 @@ class GeneralStates:
         cmd = bytearray(b"\x41\x01\x30\x10\x01")
         cmd += b"\0" * 15
 
+        # Even though this is a bitfield, my heatpump only reads in 1 change per update
+        # TODO: enforce this
         cmd[5] = (
             0x01 if controls.get("power_on_off") else 0
             + 0x02 if controls.get("drive_mode") else 0
@@ -196,7 +216,8 @@ class GeneralStates:
             # other flags?
         )
         cmd[7] = self.power_on_off.value
-        cmd[8] = self.drive_mode.value + (0x08 if self.i_see_sensor else 0x00)
+        cmd[8] = (self.drive_mode.value if isinstance(self.drive_mode, DriveMode) else self.drive_mode) \
+                 | (0x08 if self.i_see_sensor else 0x00)
         cmd[9] = 31 - int(self.temperature)
         cmd[10] = self.wind_speed.value
         cmd[11] = self.vertical_wind_direction.value
@@ -469,18 +490,19 @@ class Unknown5States:
 
 
 @dataclass
-class Unknown9States:
+class AutoStates:
     power_mode: int = 0
+    auto_mode: AutoMode = AutoMode.OFF
 
     @staticmethod
-    def is_unknown9_states_payload(data: bytes) -> bool:
+    def is_auto_states_payload(data: bytes) -> bool:
         """Check if payload contains error states data"""
         if len(data) < 6:
             return False
         return data[1] in [0x62, 0x7B] and data[5] == 0x09
 
     @classmethod
-    def parse_unknown9_states(cls, data: bytes) -> Unknown9States:
+    def parse_unknown9_states(cls, data: bytes) -> AutoStates:
         """Parse error states from hex payload"""
         logger.debug(f"Parsing {cls.__name__} payload: {data.hex()}")
         if len(data) < 6:
@@ -503,8 +525,13 @@ class Unknown9States:
 
         obj = cls.__new__(cls)
 
-        if data[6:9] != b"\0\0\0":
+        if data[6:8] != b"\0\0":
             log_unexpected_value(cls.__name__, 6, data[6:9])
+
+        if data[8] != 0:
+            # observed 0x04 during auto-mode heating startup
+            # "switching pump direction" or something?
+            log_unexpected_value(cls.__name__, 8, data[8])
 
         obj.power_mode = data[9]
         # This seems demand-related.
@@ -512,7 +539,9 @@ class Unknown9States:
         # On but not pumping is 1 (operating in Energy turns to 0 in this case)
         # Higher seems to indicate higher demand
 
-        if data[10:-1] != b"\0\0\0\0\0\0\0\0\0\0\0":
+        obj.auto_mode = try_enum_or_log(cls.__name__, 10, data[10], AutoMode)
+
+        if data[11:-1] != b"\0\0\0\0\0\0\0\0\0\0":
             log_unexpected_value(cls.__name__, 10, data[10:-1])
 
         return obj
@@ -526,13 +555,13 @@ class ParsedDeviceState:
     sensors: SensorStates | None = None
     errors: ErrorStates | None = None
     energy: EnergyStates | None = None  # New energy/operational data
+    auto_state: AutoStates | None = None
     mac: str = ""
     serial: str = ""
     rssi: str = ""
     app_version: str = ""
 
     _unknown5: Unknown5States | None = None
-    _unknown9: Unknown9States | None = None
 
     @classmethod
     def parse_code_values(cls, code_values: list[str]) -> ParsedDeviceState:
@@ -555,65 +584,12 @@ class ParsedDeviceState:
                 parsed_state.energy = EnergyStates.parse_energy_states(value, parsed_state.general)
             elif Unknown5States.is_unknown5_states_payload(value):
                 parsed_state._unknown5 = Unknown5States.parse_unknown5_states(value)
-            elif Unknown9States.is_unknown9_states_payload(value):
-                parsed_state._unknown9 = Unknown9States.parse_unknown9_states(value)
+            elif AutoStates.is_auto_states_payload(value):
+                parsed_state.auto_state = AutoStates.parse_unknown9_states(value)
             else:
                 logger.debug(f"Ignoring unknown code value: {value.hex()}")
 
         return parsed_state
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for JSON serialization"""
-        result: dict[str, Any] = {
-            "device_info": {
-                "mac": self.mac,
-                "serial": self.serial,
-                "rssi": self.rssi,
-                "app_version": self.app_version,
-            }
-        }
-
-        if self.general:
-            general_dict: dict[str, Any] = {
-                "power": "ON" if self.general.power_on_off == PowerOnOff.ON else "OFF",
-                "mode": self.general.drive_mode.name,
-                "target_temperature_celsius": self.general.temperature,
-                "fan_speed": self.general.wind_speed.name,
-                "vertical_wind_direction": self.general.vertical_wind_direction.name,
-                "horizontal_wind_direction": self.general.horizontal_wind_direction.name,
-                "dehumidification_setting": self.general.dehum_setting,
-                "power_saving_mode": self.general.is_power_saving,
-                "wind_and_wind_break_direct": self.general.wind_and_wind_break_direct,
-                # Enhanced functionality
-                "i_see_sensor_active": self.general.i_see_sensor,
-            }
-            result["general_states"] = general_dict
-
-        if self.sensors:
-            sensor_dict: dict[str, Any] = {
-                "room_temperature_celsius": self.sensors.inside_temperature_2 / 10.0,
-                "outside_temperature_celsius": self.sensors.outside_temperature / 10.0
-                if self.sensors.outside_temperature
-                else None,
-                "thermal_sensor_active": self.sensors.thermal_sensor,
-                "wind_speed_pr557": self.sensors.wind_speed_pr557,
-            }
-            result["sensor_states"] = sensor_dict
-
-        if self.errors:
-            error_dict: dict[str, Any] = {
-                "abnormal_state": self.errors.is_abnormal_state,
-                "error_code": self.errors.error_code,
-            }
-            result["error_states"] = error_dict
-
-        if self.energy:
-            energy_dict: dict[str, Any] = {
-            }
-            result["energy_states"] = energy_dict
-
-        return result
-
 
 def calc_fcc(payload: bytes) -> int:
     """Calculate FCC checksum for Mitsubishi protocol payload"""

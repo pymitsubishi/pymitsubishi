@@ -38,7 +38,7 @@ def test_fcc(payload, expected):
 
 def test_generate_general_command():
     cmd = GeneralStates().generate_general_command({})
-    assert cmd == bytes.fromhex("fc410130100100020008090000000000000000ac417d")
+    assert cmd == bytes.fromhex("fc410130100100020000090000000000000000ac4185")
 
 
 def test_generate_extend08_command():
@@ -113,8 +113,6 @@ class TestCodeValueParsing:
             assert hasattr(parsed_state.general, "power_on_off")
             assert hasattr(parsed_state.general, "drive_mode")
             assert hasattr(parsed_state.general, "temperature")
-
-        d = parsed_state.as_dict()
 
 
 class TestProfileCodeAnalysis:

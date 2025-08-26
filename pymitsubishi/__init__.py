@@ -11,6 +11,7 @@ __version__ = "0.2.0"
 from .mitsubishi_api import MitsubishiAPI
 from .mitsubishi_controller import MitsubishiController
 from .mitsubishi_parser import (
+    AutoMode,
     DriveMode,
     EnergyStates,
     ErrorStates,
@@ -33,6 +34,7 @@ __all__ = [
     "WindSpeed",
     "VerticalWindDirection",
     "HorizontalWindDirection",
+    "AutoMode",
     "GeneralStates",
     "SensorStates",
     "EnergyStates",

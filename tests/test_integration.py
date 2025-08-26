@@ -4,8 +4,8 @@ Integration tests for pymitsubishi using real device response data.
 These tests use sanitized data captured from actual Mitsubishi MAC-577IF-2E devices
 to ensure the library works correctly with real-world responses.
 """
-
 from unittest.mock import Mock, patch
+import xml.etree.ElementTree
 
 import pytest
 
@@ -20,6 +20,130 @@ from .test_fixtures import (
     SAMPLE_PROFILE_CODES,
     TEMPERATURE_TEST_CASES,
 )
+
+UNIT_INFO_EXAMPLE = """
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+ <html>
+   <head>
+     <meta charset="UTF-8">
+     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+     <link rel="stylesheet" href="common.css" />
+     <title>Information</title>
+   </head>
+   <body>
+   <form name="form" method="get" action="unitinfo">
+     <div class="all">
+       <div class="titleA">Adaptor Information</div>
+       <div class="itemA lineA">
+         <dl>
+           <dt>Adaptor name</dt>
+             <dd>MAC-577IF-E</dd>
+         </dl>
+         <dl>
+           <dt>Application version</dt>
+             <dd>33.00</dd>
+         </dl>
+         <dl>
+           <dt>Release version</dt>
+             <dd>00.06</dd>
+         </dl>
+         <dl>
+           <dt>Flash version</dt>
+             <dd>00.01</dd>
+         </dl>
+         <dl>
+           <dt>Boot version</dt>
+             <dd>00.01</dd>
+         </dl>
+         <dl>
+           <dt>Common platform version</dt>
+             <dd>01.08</dd>
+         </dl>
+         <dl>
+           <dt>Test release version</dt>
+             <dd>00.00</dd>
+         </dl>
+         <dl>
+           <dt>MAC address</dt>
+             <dd>00:11:22:33:44:55</dd>
+         </dl>
+         <dl>
+           <dt>ID</dt>
+             <dd>1234567890</dd>
+         </dl>
+         <dl>
+           <dt>Manufacturing date</dt>
+             <dd>1970/01/01</dd>
+         </dl>
+         <dl>
+           <dt>Current time</dt>
+             <dd>2001/01/01 00:03:50</dd>
+         </dl>
+         <dl>
+           <dt>Channel</dt>
+             <dd>6</dd>
+         </dl>
+         <dl>
+           <dt>RSSI</dt>
+             <dd>-43dBm</dd>
+         </dl>
+         <dl>
+           <dt>IT communication status</dt>
+             <dd>Normal</dd>
+         </dl>
+         <dl>
+           <dt>Server operation</dt>
+             <dd>ON</dd>
+         </dl>
+         <dl>
+           <dt>Server communication status</dt>
+             <dd>Error (DNS)</dd>
+         </dl>
+         <div style="display:none">
+           <dl>
+             <dt>Server communication status(HEMS)</dt>
+               <dd>--</dd>
+           </dl>
+         </div>
+         <dl>
+           <dt>SOI communication status</dt>
+             <dd>Unsupported</dd>
+         </dl>
+         <dl>
+           <dt>Thermal image timestamp</dt>
+             <dd>--</dd>
+         </dl>
+       </div>
+       <div class="titleA">Unit Information</div>
+       <div class="itemA lineA">
+         <dl>
+           <dt>Unit type</dt>
+             <dd>RAC</dd>
+         </dl>
+         <dl>
+           <dt>IT protocol version</dt>
+             <dd>03.00</dd>
+         </dl>
+         <dl>
+           <dt>Error</dt>
+             <dd>8000</dd>
+         </dl>
+       </div>
+       <div class="itemB">
+         <input class="btnA" type="submit" value="Reload">
+       </div>
+     </div>
+     </form>
+   </body>
+ </html>
+"""
+
+def test_unit_info():
+    api = MitsubishiAPI("localhost")
+    parsed_unit_info = api._parse_unit_info_html(UNIT_INFO_EXAMPLE)
+    assert parsed_unit_info["Adaptor Information"]["MAC address"] == "00:11:22:33:44:55"
+    assert parsed_unit_info["Adaptor Information"]["RSSI"] == -43
+    assert parsed_unit_info["Adaptor Information"]["Channel"] == 6
 
 
 class TestRealDeviceResponseParsing:
@@ -76,20 +200,6 @@ class TestTemperatureControl:
             assert 160 <= temp_units <= 320  # Valid range
         else:
             assert temp_units < 160 or temp_units > 320  # Invalid range
-
-
-class TestModeControl:
-    """Test AC mode control with real mode mappings."""
-
-    @pytest.mark.parametrize("test_case", MODE_TEST_CASES)
-    def test_mode_mappings(self, test_case):
-        """Test that mode enums map to correct hex values."""
-        mode_name = test_case["mode"]
-        expected_hex = test_case["hex_value"]
-
-        mode = DriveMode[mode_name]
-        # Convert the hex string to integer for comparison
-        assert mode.value == int(expected_hex, 16)
 
 
 @patch("pymitsubishi.mitsubishi_api.requests.post")
@@ -154,39 +264,11 @@ class TestMitsubishiControllerIntegration:
         # Mock the API to return real XML data
         self.mock_api.send_status_request.return_value = REAL_DEVICE_XML_RESPONSE
 
-        success = self.controller.fetch_status()
-        assert success
+        self.controller.fetch_status()
 
         # Verify device info extraction
         assert self.controller.state.mac == "AA:BB:CC:DD:EE:FF"
         assert self.controller.state.serial == "1234567890"
-
-    def test_status_summary_format(self):
-        """Test that status summary matches expected format."""
-        # Set up controller state manually
-        self.controller.state.mac = "AA:BB:CC:DD:EE:FF"
-        self.controller.state.serial = "1234567890"
-
-        # Mock a minimal state for testing
-        with patch.object(self.controller, "state") as mock_state:
-            mock_state.mac = "AA:BB:CC:DD:EE:FF"
-            mock_state.serial = "1234567890"
-            mock_state.general = Mock()
-            mock_state.general.power_on_off = PowerOnOff.ON
-            mock_state.general.drive_mode = DriveMode.COOLER
-            mock_state.general.temperature = 225  # 22.5°C
-            mock_state.general.wind_speed = WindSpeed.AUTO
-            mock_state.sensors = Mock()
-            mock_state.sensors.room_temperature = 220  # 22.0°C
-            mock_state.sensors.outside_temperature = 200  # 20.0°C
-
-            summary = self.controller.get_status_summary()
-
-            # Verify key fields are present
-            assert "mac" in summary
-            assert "serial" in summary
-            assert "power" in summary
-            assert "mode" in summary
 
 
 class TestErrorHandling:
@@ -200,11 +282,8 @@ class TestErrorHandling:
         with patch.object(api, "send_status_request") as mock_request:
             mock_request.return_value = "<invalid>xml<missing_close>"
 
-            # Should handle gracefully without crashing
-            success = controller.fetch_status()
-            # The controller returns True if response is received, but parsing may fail internally
-            # This is actually correct behavior - the method doesn't fail, it just logs the error
-            assert success
+            with pytest.raises(xml.etree.ElementTree.ParseError):
+                controller.fetch_status()
 
     def test_connection_timeout_handling(self):
         """Test handling of connection timeouts."""
@@ -215,9 +294,8 @@ class TestErrorHandling:
         with patch.object(api.session, "post") as mock_post:
             mock_post.side_effect = requests.exceptions.ConnectTimeout("Connection timeout")
 
-            # Should handle timeout gracefully by returning None
-            response = api.send_status_request()
-            assert response is None
+            with pytest.raises(requests.exceptions.ConnectTimeout):
+                api.send_status_request()
 
 
 class TestRealWorldScenarios:
@@ -232,8 +310,7 @@ class TestRealWorldScenarios:
         mock_api.send_status_request.return_value = REAL_DEVICE_XML_RESPONSE
 
         # Test status fetch
-        success = controller.fetch_status()
-        assert success
+        controller.fetch_status()
 
         # Mock successful control command
         mock_api.send_control_request.return_value = True

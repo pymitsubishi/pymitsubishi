@@ -162,7 +162,7 @@ class MitsubishiAPI:
             decrypted = self.decrypt_payload(encrypted_response)
             return decrypted
         else:
-            raise RuntimeError(f"Could not find any text in response")
+            raise RuntimeError("Could not find any text in response")
 
     def send_reboot_request(self) -> str:
         return self.make_request("<CSV><RESET></RESET></CSV>")
@@ -205,7 +205,7 @@ class MitsubishiAPI:
         # We should be using a full blown HTML parser, but let's brute force it with regexes
         # obligatory https://stackoverflow.com/a/1732454 reference
 
-        unit_info = {}
+        unit_info: dict[str, dict[str, Any]] = {}
         section = ""
         pattern = r"(?:<(div) class=\"titleA\">([^<]*)</div>)|(?:<(dt)>([^<]+)</dt>\s*<dd>([^<]+)</dd>)"
         for match in re.findall(pattern, html_content):

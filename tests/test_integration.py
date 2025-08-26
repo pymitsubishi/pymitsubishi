@@ -4,17 +4,16 @@ Integration tests for pymitsubishi using real device response data.
 These tests use sanitized data captured from actual Mitsubishi MAC-577IF-2E devices
 to ensure the library works correctly with real-world responses.
 """
+
 from unittest.mock import Mock, patch
 import xml.etree.ElementTree
 
 import pytest
 
 from pymitsubishi import MitsubishiAPI, MitsubishiController
-from pymitsubishi.mitsubishi_parser import DriveMode, PowerOnOff, WindSpeed
 
 from .test_fixtures import (
     LED_PATTERNS,
-    MODE_TEST_CASES,
     REAL_DEVICE_XML_RESPONSE,
     SAMPLE_CODE_VALUES,
     SAMPLE_PROFILE_CODES,
@@ -137,6 +136,7 @@ UNIT_INFO_EXAMPLE = """
    </body>
  </html>
 """
+
 
 def test_unit_info():
     api = MitsubishiAPI("localhost")

@@ -26,14 +26,15 @@ logger = logging.getLogger(__name__)
 
 class MitsubishiController:
     """Business logic controller for Mitsubishi AC devices"""
+
     wait_time_after_command = 5  # Number of seconds after a command that the result is visible in the returned status
     # Found experimentally by increasing until I reliably saw my updates
 
     def __init__(self, api: MitsubishiAPI):
         self.api = api
         self.profile_code: list[bytes] = []
-        self.state = None
-        self.unit_info = None
+        self.state: ParsedDeviceState | None = None
+        self.unit_info: dict[str, dict[str, Any]] = {}
 
     @classmethod
     def create(cls, device_host_port: str, encryption_key: str | bytes = "unregistered"):
@@ -44,10 +45,9 @@ class MitsubishiController:
     def fetch_status(self) -> ParsedDeviceState:
         """Fetch current device status and optionally detect capabilities"""
         response = self.api.send_status_request()  # may raise
-        self._parse_status_response(response)
-        return self.state
+        return self._parse_status_response(response)
 
-    def _parse_status_response(self, response: str):
+    def _parse_status_response(self, response: str) -> ParsedDeviceState:
         """Parse the device status response and update state"""
         # Parse the XML response
         root = ET.fromstring(response)  # may raise
@@ -57,10 +57,7 @@ class MitsubishiController:
         code_values = [elem.text for elem in code_values_elems if elem.text]
 
         # Use the parser module to get structured state
-        parsed_state = ParsedDeviceState.parse_code_values(code_values)
-
-        if parsed_state:
-            self.state = parsed_state
+        self.state = ParsedDeviceState.parse_code_values(code_values)
 
         # Extract and set device identity
         mac_elem = root.find(".//MAC")
@@ -77,13 +74,15 @@ class MitsubishiController:
             if elem.text:
                 self.profile_code.append(bytes.fromhex(elem.text))
 
+        return self.state
+
     def _ensure_state_available(self):
         if self.state is None or self.state.general is None:
             self.fetch_status()
 
     def _create_updated_state(self, **overrides) -> GeneralStates:
         """Create updated state with specified field overrides"""
-        if not self.state.general:
+        if not self.state or not self.state.general:
             # Create default state if none exists
             return GeneralStates(**overrides)
 
@@ -188,7 +187,11 @@ class MitsubishiController:
     def send_buzzer_command(self, enabled: bool = True) -> ParsedDeviceState:
         """Send buzzer control command"""
         self._ensure_state_available()
-        new_state = self._send_extend08_command(self.state.general, {"buzzer": enabled})
+        if self.state is not None and self.state.general is not None:
+            general_state = self.state.general
+        else:
+            general_state = GeneralStates()
+        new_state = self._send_extend08_command(general_state, {"buzzer": enabled})
         self.state = new_state
         return new_state
 
@@ -200,8 +203,7 @@ class MitsubishiController:
         logger.debug(f"🔧 Sending command: {hex_command}")
 
         response = self.api.send_hex_command(hex_command)
-        self._parse_status_response(response)
-        return self.state
+        return self._parse_status_response(response)
 
     def _send_extend08_command(self, state: GeneralStates, controls: dict[str, bool]) -> ParsedDeviceState:
         """Send an extend08 command for advanced features"""
@@ -211,8 +213,7 @@ class MitsubishiController:
         logger.debug(f"🔧 Sending extend08 command: {hex_command}")
 
         response = self.api.send_hex_command(hex_command)
-        self._parse_status_response(response)
-        return self.state
+        return self._parse_status_response(response)
 
     def enable_echonet(self) -> None:
         """Send ECHONET enable command"""

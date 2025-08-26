@@ -11,7 +11,6 @@ from __future__ import annotations
 import dataclasses
 from enum import Enum
 import logging
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -71,10 +70,9 @@ class AutoMode(Enum):
 
 
 def log_unexpected_value(code_value: str, position: int, value: int | bytes):
-    if isinstance(value, bytes):
-        value = "[" + value.hex() + "]"
-    logger.warning(f"Unexpected value found in {code_value} at position {position}: {value}")
-    logger.warning(f"Please report this, so this can be added to the decoding.")
+    svalue = "[" + value.hex() + "]" if isinstance(value, bytes) else str(value)
+    logger.warning(f"Unexpected value found in {code_value} at position {position}: {svalue}")
+    logger.warning("Please report this, so this can be added to the decoding.")
 
 
 def try_enum_or_log(code_value: str, position: int, value: int, enum_class: type):
@@ -175,8 +173,8 @@ class GeneralStates:
         # Enhanced wide vane parsing with adjustment flag (SwiCago)
         wide_vane_data = data[15]  # data[10] in SwiCago
         obj.horizontal_wind_direction = try_enum_or_log(
-            cls.__name__, 15,
-            wide_vane_data & 0x0F, HorizontalWindDirection)  # Lower 4 bits
+            cls.__name__, 15, wide_vane_data & 0x0F, HorizontalWindDirection
+        )  # Lower 4 bits
         obj.wide_vane_adjustment = (wide_vane_data & 0xF0) == 0x80  # Upper 4 bits = 0x80
 
         if data[16] != 0x00:
@@ -201,18 +199,23 @@ class GeneralStates:
         # Even though this is a bitfield, my heatpump only reads in 1 change per update
         # TODO: enforce this
         cmd[5] = (
-            0x01 if controls.get("power_on_off") else 0
-            + 0x02 if controls.get("drive_mode") else 0
-            + 0x04 if controls.get("temperature") else 0
-            + 0x08 if controls.get("wind_speed") else 0
-            + 0x10 if controls.get("up_down_wind_direct") else 0
+            0x01
+            if controls.get("power_on_off")
+            else 0 + 0x02
+            if controls.get("drive_mode")
+            else 0 + 0x04
+            if controls.get("temperature")
+            else 0 + 0x08
+            if controls.get("wind_speed")
+            else 0 + 0x10
+            if controls.get("up_down_wind_direct")
+            else 0
             # 0x20 ?
             # 0x40 ?
             # 0x80 ?
         )
         cmd[6] = (
-            0x01 if controls.get("left_right_wind_direct") else 0
-            + 0x02 if controls.get("outside_control", True) else 0
+            0x01 if controls.get("left_right_wind_direct") else 0 + 0x02 if controls.get("outside_control", True) else 0
             # other flags?
         )
         cmd[7] = self.power_on_off.value
@@ -227,7 +230,7 @@ class GeneralStates:
         cmd[15] = 0
         cmd[16] = 0
         cmd[17] = self.horizontal_wind_direction.value
-        cmd[18] = 0x80 + int(self.fine_temperature * 2)
+        cmd[18] = 0x80 + int(self.fine_temperature * 2) if self.fine_temperature is not None else 0x00
         cmd[19] = 0x41
 
         # Calculate and append FCC
@@ -240,10 +243,15 @@ class GeneralStates:
         cmd[5] = (
             # 0x01?
             # 0x02?
-            0x04 if controls.get("dehum") else 0
-            + 0x08 if controls.get("power_saving") else 0
-            + 0x10 if controls.get("buzzer") else 0
-            + 0x20 if controls.get("wind_and_wind_break") else 0
+            0x04
+            if controls.get("dehum")
+            else 0 + 0x08
+            if controls.get("power_saving")
+            else 0 + 0x10
+            if controls.get("buzzer")
+            else 0 + 0x20
+            if controls.get("wind_and_wind_break")
+            else 0
             # 0x40?
             # 0x80?
         )
@@ -319,14 +327,14 @@ class SensorStates:
         # but they seem to move exactly together
         # data[12] moves differently and seems to lead vs data[8]/data[11]
 
-        if data[13] != 0xfe:
+        if data[13] != 0xFE:
             # also seen: 0x00
             log_unexpected_value(cls.__name__, 13, data[13])
 
         if data[14] != 0x42:
             log_unexpected_value(cls.__name__, 14, data[14])
 
-        obj.runtime_minutes = int.from_bytes(data[15:19], 'big', signed=False)
+        obj.runtime_minutes = int.from_bytes(data[15:19], "big", signed=False)
         # runtime is at least 24 bit long data[16:19]
         # Since 24 bits is a bit odd, I'm assuming it's 32bit and join in an additional leading 0x00 at data[15]
 
@@ -393,8 +401,8 @@ class EnergyStates:
 
         # The outdoor unit is reported as part of the first indoor unit (port A)
         # Doesn't match exactly with my power meter, but it's close.
-        obj.power_watt = int.from_bytes(data[10:12], 'big', signed=False)
-        obj.energy_hecto_watt_hour = int.from_bytes(data[12:14], 'big', signed=False)  # in 100Wh units
+        obj.power_watt = int.from_bytes(data[10:12], "big", signed=False)
+        obj.energy_hecto_watt_hour = int.from_bytes(data[12:14], "big", signed=False)  # in 100Wh units
 
         if data[14:-1] != b"\0\0\x42\0\0\0\0":
             log_unexpected_value(cls.__name__, 12, data[12:-1])

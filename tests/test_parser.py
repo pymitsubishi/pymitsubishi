@@ -8,11 +8,8 @@ collected from real Mitsubishi MAC-577IF-2E devices.
 import pytest
 
 from pymitsubishi.mitsubishi_parser import (
-    DriveMode,
     GeneralStates,
     ParsedDeviceState,
-    PowerOnOff,
-    WindSpeed,
     calc_fcc,
     convert_temperature,
     convert_temperature_to_segment,

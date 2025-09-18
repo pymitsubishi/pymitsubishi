@@ -1,6 +1,13 @@
 import pytest
 
-from pymitsubishi import DriveMode, GeneralStates, HorizontalWindDirection, PowerOnOff, VerticalWindDirection
+from pymitsubishi import (
+    DriveMode,
+    GeneralStates,
+    HorizontalWindDirection,
+    PowerOnOff,
+    RemoteLock,
+    VerticalWindDirection,
+)
 
 
 @pytest.mark.parametrize(
@@ -134,6 +141,24 @@ def test_parse_general_states_h_vane_isee(data_hex, h_vane, isee_h_vane):
     states = GeneralStates.parse_general_states(bytes.fromhex(data_hex))
     assert states.horizontal_wind_direction == h_vane
     assert states.wind_and_wind_break_direct == isee_h_vane
+
+
+@pytest.mark.parametrize(
+    "data_hex, lock",
+    [  #  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+        ("fc620130100200000103080000000080ae46000000db", RemoteLock.Unlocked),
+        ("fc620130100200000103080000020080ae46000000d9", RemoteLock.ModeLocked),
+        ("fc620130100200000103080000040080ae46000000d7", RemoteLock.TemperatureLocked),
+        ("fc620130100200000103080000060080ae46000000d5", RemoteLock.ModeLocked | RemoteLock.TemperatureLocked),
+        (
+            "fc620130100200000103080000070080ae46000000d4",
+            RemoteLock.ModeLocked | RemoteLock.TemperatureLocked | RemoteLock.PowerLocked,
+        ),
+    ],
+)
+def test_parse_general_states_remote_lock(data_hex, lock):
+    states = GeneralStates.parse_general_states(bytes.fromhex(data_hex))
+    assert states.remote_lock == lock
 
 
 # Based on my tests, these settings available on my remote are not visible in the data:

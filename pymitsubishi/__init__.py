@@ -19,6 +19,7 @@ from .mitsubishi_parser import (
     HorizontalWindDirection,
     ParsedDeviceState,
     PowerOnOff,
+    RemoteLock,
     SensorStates,
     VerticalWindDirection,
     WindSpeed,
@@ -40,4 +41,5 @@ __all__ = [
     "EnergyStates",
     "ErrorStates",
     "ParsedDeviceState",
+    "RemoteLock",
 ]

@@ -69,6 +69,13 @@ class AutoMode(enum.Enum):
     AUTO_COOLING = 3
 
 
+class RemoteLock(enum.IntFlag):
+    Unlocked = 0
+    PowerLocked = 1
+    ModeLocked = 2
+    TemperatureLocked = 4
+
+
 class Controls(enum.IntFlag):
     NoControl = 0
     PowerOnOff = 0x0100
@@ -125,6 +132,7 @@ class GeneralStates:
     fine_temperature: float | None = 22.0
     wind_speed: WindSpeed = WindSpeed.AUTO
     vertical_wind_direction: VerticalWindDirection = VerticalWindDirection.AUTO
+    remote_lock: RemoteLock = RemoteLock.Unlocked
     horizontal_wind_direction: HorizontalWindDirection = HorizontalWindDirection.AUTO
     dehum_setting: int = 0
     is_power_saving: bool = False
@@ -198,9 +206,10 @@ class GeneralStates:
         obj.coarse_temperature = 31 - data[10]
         obj.wind_speed = try_enum_or_log(cls.__name__, 11, data[11], WindSpeed)
         obj.vertical_wind_direction = try_enum_or_log(cls.__name__, 12, data[12], VerticalWindDirection)
+        obj.remote_lock = try_enum_or_log(cls.__name__, 13, data[13], RemoteLock)
 
-        if data[13:15] != b"\0\0":
-            log_unexpected_value(cls.__name__, 13, data[13:15])
+        if data[14] != 0:
+            log_unexpected_value(cls.__name__, 14, data[14])
 
         # Enhanced wide vane parsing with adjustment flag (SwiCago)
         wide_vane_data = data[15]  # data[10] in SwiCago
@@ -238,7 +247,7 @@ class GeneralStates:
         cmd[9] = 31 - int(self.temperature)
         cmd[10] = self.wind_speed.value
         cmd[11] = self.vertical_wind_direction.value
-        cmd[12] = 0
+        cmd[12] = self.remote_lock.value
         cmd[13] = 0
         cmd[14] = 0
         cmd[15] = 0

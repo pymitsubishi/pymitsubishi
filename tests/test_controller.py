@@ -2,7 +2,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from pymitsubishi import DriveMode, MitsubishiController
+from pymitsubishi import DriveMode, MitsubishiController, RemoteLock
 from tests.test_fixtures import REAL_DEVICE_XML_RESPONSE
 
 
@@ -35,5 +35,23 @@ def test_set_auto(mode, hex_cmd):
     mock_api.send_hex_command = Mock(return_value=REAL_DEVICE_XML_RESPONSE)
 
     controller.set_mode(mode)
+
+    mock_api.send_hex_command.assert_called_once_with(hex_cmd)
+
+
+@pytest.mark.parametrize(
+    "lock, hex_cmd",
+    [
+        (RemoteLock.PowerLocked, "fc410130100120020000090000010000000000ac4164"),
+    ],
+)
+def test_set_remote_lock(lock, hex_cmd):
+    """Test a complete cycle of status fetch and device control."""
+    mock_api = Mock()
+    controller = MitsubishiController(mock_api)
+    mock_api.send_status_request.return_value = REAL_DEVICE_XML_RESPONSE
+    mock_api.send_hex_command = Mock(return_value=REAL_DEVICE_XML_RESPONSE)
+
+    controller.set_remote_lock(lock)
 
     mock_api.send_hex_command.assert_called_once_with(hex_cmd)

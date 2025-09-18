@@ -19,6 +19,7 @@ from .mitsubishi_parser import (
     HorizontalWindDirection,
     ParsedDeviceState,
     PowerOnOff,
+    RemoteLock,
     VerticalWindDirection,
     WindSpeed,
 )
@@ -105,6 +106,7 @@ class MitsubishiController:
             wind_and_wind_break_direct=overrides.get(
                 "wind_and_wind_break_direct", self.state.general.wind_and_wind_break_direct
             ),
+            remote_lock=overrides.get("remote_lock", self.state.general.remote_lock),
         )
 
     def set_power(self, power_on: bool) -> ParsedDeviceState:
@@ -194,6 +196,14 @@ class MitsubishiController:
         else:
             general_state = GeneralStates()
         new_state = self._send_extend08_command(general_state, Controls08.Buzzer)
+        self.state = new_state
+        return new_state
+
+    def set_remote_lock(self, lock: RemoteLock) -> ParsedDeviceState:
+        self._ensure_state_available()
+
+        updated_state = self._create_updated_state(remote_lock=lock)
+        new_state = self._send_general_control_command(updated_state, Controls.RemoteLock)
         self.state = new_state
         return new_state
 

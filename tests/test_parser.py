@@ -8,6 +8,8 @@ collected from real Mitsubishi MAC-577IF-2E devices.
 import pytest
 
 from pymitsubishi.mitsubishi_parser import (
+    Controls,
+    Controls08,
     GeneralStates,
     ParsedDeviceState,
     calc_fcc,
@@ -34,12 +36,12 @@ def test_fcc(payload, expected):
 
 
 def test_generate_general_command():
-    cmd = GeneralStates().generate_general_command({})
+    cmd = GeneralStates().generate_general_command(Controls.NoControl)
     assert cmd == bytes.fromhex("fc410130100100020000090000000000000000ac4185")
 
 
 def test_generate_extend08_command():
-    cmd = GeneralStates().generate_extend08_command({})
+    cmd = GeneralStates().generate_extend08_command(Controls08.NoControl)
     assert cmd == bytes.fromhex("fc410130100800000000000000000000000000000076")
 
 

@@ -9,18 +9,18 @@ including enums, state classes, and functions for decoding hex values.
 from __future__ import annotations
 
 import dataclasses
-from enum import Enum
+import enum
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-class PowerOnOff(Enum):
+class PowerOnOff(enum.Enum):
     OFF = 0
     ON = 1
 
 
-class DriveMode(Enum):
+class DriveMode(enum.Enum):
     AUTO = 0
     HEATER = 1
     DEHUM = 2
@@ -28,7 +28,7 @@ class DriveMode(Enum):
     FAN = 7
 
 
-class WindSpeed(Enum):
+class WindSpeed(enum.Enum):
     AUTO = 0
     S1 = 1
     S2 = 2
@@ -38,7 +38,7 @@ class WindSpeed(Enum):
     FULL = 6
 
 
-class VerticalWindDirection(Enum):
+class VerticalWindDirection(enum.Enum):
     AUTO = 0
     V1 = 1
     V2 = 2
@@ -48,7 +48,7 @@ class VerticalWindDirection(Enum):
     SWING = 7
 
 
-class HorizontalWindDirection(Enum):
+class HorizontalWindDirection(enum.Enum):
     AUTO = 0
     FAR_LEFT = 1
     LEFT = 2
@@ -62,11 +62,43 @@ class HorizontalWindDirection(Enum):
     SWING = 12
 
 
-class AutoMode(Enum):
+class AutoMode(enum.Enum):
     OFF = 0
     SWITCHING = 1
     AUTO_HEATING = 2
     AUTO_COOLING = 3
+
+
+class Controls(enum.IntFlag):
+    NoControl = 0
+    PowerOnOff = 0x0100
+    DriveMode = 0x0200
+    Temperature = 0x0400
+    WindSpeed = 0x0800
+    UpDownWindDirection = 0x1000
+    RemoteLock = 0x2000  # TODO: remote_lock is untested and may be the wrong bit
+    # 0x4000
+    # 0x8000
+    LeftRightWindDirect = 0x0001
+    OutsideControl = 0x0002
+    # 0x0004
+    # 0x0008
+    # 0x0010
+    # 0x0020
+    # 0x0040
+    # 0x0080
+
+
+class Controls08(enum.IntFlag):
+    NoControl = 0
+    # 0x01
+    # 0x02
+    Dehum = 0x04
+    PowerSaving = 0x08
+    Buzzer = 0x10
+    WindAndWindBreak = 0x20
+    # 0x40
+    # 0x80
 
 
 def log_unexpected_value(code_value: str, position: int, value: int | bytes):
@@ -192,32 +224,14 @@ class GeneralStates:
 
         return obj
 
-    def generate_general_command(self, controls: dict[str, bool]) -> bytes:
+    def generate_general_command(self, controls: Controls) -> bytes:
         cmd = bytearray(b"\x41\x01\x30\x10\x01")
         cmd += b"\0" * 15
 
         # Even though this is a bitfield, my heatpump only reads in 1 change per update
         # TODO: enforce this
-        cmd[5] = (
-            0x01
-            if controls.get("power_on_off")
-            else 0 + 0x02
-            if controls.get("drive_mode")
-            else 0 + 0x04
-            if controls.get("temperature")
-            else 0 + 0x08
-            if controls.get("wind_speed")
-            else 0 + 0x10
-            if controls.get("up_down_wind_direct")
-            else 0
-            # 0x20 ?
-            # 0x40 ?
-            # 0x80 ?
-        )
-        cmd[6] = (
-            0x01 if controls.get("left_right_wind_direct") else 0 + 0x02 if controls.get("outside_control", True) else 0
-            # other flags?
-        )
+        controls |= Controls.OutsideControl
+        cmd[5:7] = controls.to_bytes(2, byteorder="big", signed=False)
         cmd[7] = self.power_on_off.value
         cmd[8] = self.drive_mode.value if isinstance(self.drive_mode, DriveMode) else self.drive_mode
         # TODO: figure out how to combine mode with iSee; Mode changes don't seem to work when >0x08
@@ -237,29 +251,15 @@ class GeneralStates:
         fcc = calc_fcc(cmd)
         return b"\xfc" + cmd + bytes([fcc])
 
-    def generate_extend08_command(self, controls: dict[str, bool]) -> bytes:
+    def generate_extend08_command(self, controls: Controls08) -> bytes:
         cmd = bytearray(b"\x41\x01\x30\x10\x08")
         cmd += b"\0" * 15
-        cmd[5] = (
-            # 0x01?
-            # 0x02?
-            0x04
-            if controls.get("dehum")
-            else 0 + 0x08
-            if controls.get("power_saving")
-            else 0 + 0x10
-            if controls.get("buzzer")
-            else 0 + 0x20
-            if controls.get("wind_and_wind_break")
-            else 0
-            # 0x40?
-            # 0x80?
-        )
+        cmd[5:6] = controls.to_bytes(1, byteorder="big", signed=False)
         # cmd[6:8] = 0
-        cmd[8] = self.dehum_setting if controls.get("dehum") else 0
+        cmd[8] = self.dehum_setting if (controls & Controls08.Dehum) else 0
         cmd[9] = 0x0A if self.is_power_saving else 0x00
-        cmd[10] = self.wind_and_wind_break_direct if controls.get("wind_and_wind_break") else 0x00
-        cmd[11] = 0x01 if controls.get("buzzer") else 0x00
+        cmd[10] = self.wind_and_wind_break_direct if (controls & Controls08.WindAndWindBreak) else 0x00
+        cmd[11] = 0x01 if (controls & Controls08.Buzzer) else 0x00
         # cmd[12:20] = 0
 
         fcc = calc_fcc(cmd)

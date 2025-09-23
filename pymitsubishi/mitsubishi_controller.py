@@ -12,6 +12,8 @@ import xml.etree.ElementTree as ET
 
 from .mitsubishi_api import MitsubishiAPI
 from .mitsubishi_parser import (
+    Controls,
+    Controls08,
     DriveMode,
     GeneralStates,
     HorizontalWindDirection,
@@ -111,7 +113,7 @@ class MitsubishiController:
 
         new_power = PowerOnOff.ON if power_on else PowerOnOff.OFF
         updated_state = self._create_updated_state(power_on_off=new_power)
-        new_state = self._send_general_control_command(updated_state, {"power_on_off": True})
+        new_state = self._send_general_control_command(updated_state, Controls.PowerOnOff)
         self.state = new_state
         return new_state
 
@@ -120,7 +122,7 @@ class MitsubishiController:
         self._ensure_state_available()
 
         updated_state = self._create_updated_state(temperature=temperature_celsius)
-        new_state = self._send_general_control_command(updated_state, {"temperature": True})
+        new_state = self._send_general_control_command(updated_state, Controls.Temperature)
         self.state = new_state
         return new_state
 
@@ -135,7 +137,7 @@ class MitsubishiController:
             mode = mode.value | 8
 
         updated_state = self._create_updated_state(drive_mode=mode)
-        new_state = self._send_general_control_command(updated_state, {"drive_mode": True})
+        new_state = self._send_general_control_command(updated_state, Controls.DriveMode)
         self.state = new_state
         return new_state
 
@@ -144,7 +146,7 @@ class MitsubishiController:
         self._ensure_state_available()
 
         updated_state = self._create_updated_state(wind_speed=speed)
-        new_state = self._send_general_control_command(updated_state, {"wind_speed": True})
+        new_state = self._send_general_control_command(updated_state, Controls.WindSpeed)
         self.state = new_state
         return new_state
 
@@ -153,7 +155,7 @@ class MitsubishiController:
         self._ensure_state_available()
 
         updated_state = self._create_updated_state(vertical_wind_direction=direction)
-        new_state = self._send_general_control_command(updated_state, {"up_down_wind_direct": True})
+        new_state = self._send_general_control_command(updated_state, Controls.UpDownWindDirection)
         self.state = new_state
         return new_state
 
@@ -162,7 +164,7 @@ class MitsubishiController:
         self._ensure_state_available()
 
         updated_state = self._create_updated_state(horizontal_wind_direction=direction)
-        new_state = self._send_general_control_command(updated_state, {"left_right_wind_direct": True})
+        new_state = self._send_general_control_command(updated_state, Controls.LeftRightWindDirect)
         self.state = new_state
         return new_state
 
@@ -171,7 +173,7 @@ class MitsubishiController:
         self._ensure_state_available()
 
         updated_state = self._create_updated_state(dehum_setting=setting)
-        new_state = self._send_extend08_command(updated_state, {"dehum": True})
+        new_state = self._send_extend08_command(updated_state, Controls08.Dehum)
         self.state = new_state
         return new_state
 
@@ -180,7 +182,7 @@ class MitsubishiController:
         self._ensure_state_available()
 
         updated_state = self._create_updated_state(is_power_saving=enabled)
-        new_state = self._send_extend08_command(updated_state, {"power_saving": True})
+        new_state = self._send_extend08_command(updated_state, Controls08.PowerSaving)
         self.state = new_state
         return new_state
 
@@ -191,11 +193,11 @@ class MitsubishiController:
             general_state = self.state.general
         else:
             general_state = GeneralStates()
-        new_state = self._send_extend08_command(general_state, {"buzzer": enabled})
+        new_state = self._send_extend08_command(general_state, Controls08.Buzzer)
         self.state = new_state
         return new_state
 
-    def _send_general_control_command(self, state: GeneralStates, controls: dict[str, bool]) -> ParsedDeviceState:
+    def _send_general_control_command(self, state: GeneralStates, controls: Controls) -> ParsedDeviceState:
         """Send a general control command to the device"""
         # Generate the hex command
         hex_command = state.generate_general_command(controls).hex()
@@ -205,7 +207,7 @@ class MitsubishiController:
         response = self.api.send_hex_command(hex_command)
         return self._parse_status_response(response)
 
-    def _send_extend08_command(self, state: GeneralStates, controls: dict[str, bool]) -> ParsedDeviceState:
+    def _send_extend08_command(self, state: GeneralStates, controls: Controls08) -> ParsedDeviceState:
         """Send an extend08 command for advanced features"""
         # Generate the hex command
         hex_command = state.generate_extend08_command(controls).hex()

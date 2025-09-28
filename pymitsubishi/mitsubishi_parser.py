@@ -83,8 +83,8 @@ class Controls(enum.IntFlag):
     Temperature = 0x0400
     WindSpeed = 0x0800
     UpDownWindDirection = 0x1000
-    RemoteLock = 0x2000  # TODO: remote_lock is untested and may be the wrong bit
-    # 0x4000
+    # 0x2000
+    RemoteLock = 0x4000
     # 0x8000
     LeftRightWindDirect = 0x0001
     OutsideControl = 0x0002

@@ -247,10 +247,13 @@ class GeneralStates:
         cmd[9] = 31 - int(self.temperature)
         cmd[10] = self.wind_speed.value
         cmd[11] = self.vertical_wind_direction.value
-        cmd[12] = self.remote_lock.value
+        cmd[12] = 0
         cmd[13] = 0
         cmd[14] = 0
-        cmd[15] = 0
+
+        cmd[15] = self.remote_lock.value  # Changes written in different location vs current status
+        # https://github.com/pymitsubishi/pymitsubishi/issues/13#issuecomment-3346213470
+
         cmd[16] = 0
         cmd[17] = self.horizontal_wind_direction.value
         cmd[18] = 0x80 + int(self.fine_temperature * 2) if self.fine_temperature is not None else 0x00

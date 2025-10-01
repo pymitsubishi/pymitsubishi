@@ -42,7 +42,7 @@ def test_set_auto(mode, hex_cmd):
 @pytest.mark.parametrize(
     "lock, hex_cmd",
     [
-        (RemoteLock.PowerLocked, "fc410130100140020000090000010000000000ac4144"),
+        (RemoteLock.PowerLocked, "fc410130100140020000090000000000010000ac4144"),
     ],
 )
 def test_set_remote_lock(lock, hex_cmd):

@@ -43,60 +43,42 @@ logger = logging.getLogger(__name__)
 ctrl = MitsubishiController.create(args.host)
 
 ctrl.fetch_status()
-desired_state = ctrl.state.general
-controls = Controls.NoControl
-controls08 = Controls08.NoControl
+changeset = ctrl.changeset()
 
 if args.mode:
     drive_mode = DriveMode[args.mode.upper()]
     print(f"Setting mode to {drive_mode}")
-    if drive_mode == DriveMode.AUTO:
-        drive_mode = 8
-    else:
-        drive_mode = drive_mode.value
-    desired_state.drive_mode = drive_mode
-    controls |= Controls.DriveMode
+    changeset.set_mode(drive_mode)
 if args.target_temperature:
     print(f"Setting target temperature to {args.target_temperature}")
-    desired_state.temperature = args.target_temperature
-    controls |= Controls.Temperature
+    changeset.set_target_temperature(args.target_temperature)
 if args.fan_speed:
     fan_speed = WindSpeed[args.fan_speed.upper()]
     print(f"Setting fan speed to {fan_speed}")
-    desired_state.wind_speed = fan_speed
-    controls |= Controls.WindSpeed
+    changeset.set_fan_speed(fan_speed)
 if args.vertical_wind_direction:
     v_vane = VerticalWindDirection[args.vertical_wind_direction.upper()]
     print(f"Setting vertical wind direction to {v_vane}")
-    desired_state.vertical_wind_direction = v_vane
-    controls |= Controls.UpDownWindDirection
+    changeset.set_vertical_wind_direction(v_vane)
 if args.horizontal_wind_direction:
     h_vane = HorizontalWindDirection[args.horizontal_wind_direction.upper()]
     print(f"Setting horizontal wind direction to {h_vane}")
-    desired_state.horizontal_wind_direction = h_vane
-    controls |= Controls.LeftRightWindDirect
+    changeset.set_horizontal_wind_direction(h_vane)
 if args.power_saving:
     ps = args.power_saving.upper() == "ON"
     print(f"Setting power saving to {ps}")
-    desired_state.is_power_saving = ps
-    controls08 |= Controls08.PowerSaving
+    changeset.set_power_saving(ps)
 if args.power:
     power = PowerOnOff[args.power]
     print(f"Setting power to {power}")
-    desired_state.power_on_off = power
-    controls |= Controls.PowerOnOff
+    changeset.set_power(power)
 
 if args.reboot:
     print("Sending reboot command...")
     ctrl.api.send_reboot_request()
 
-if controls != Controls.NoControl:
-    new_state = ctrl._send_general_control_command(desired_state, controls)
-
-if controls08 != Controls08.NoControl:
-    new_state = ctrl._send_extend08_command(desired_state, controls)
-
-if controls != Controls.NoControl or controls08 != Controls08.NoControl:
+if not changeset.empty:
+    ctrl.apply_changeset(changeset)
     print(f"Updates sent, waiting {ctrl.wait_time_after_command} seconds to see changes...")
     time.sleep(ctrl.wait_time_after_command)
     ctrl.fetch_status()

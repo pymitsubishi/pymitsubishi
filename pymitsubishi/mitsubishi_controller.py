@@ -37,6 +37,10 @@ class MitsubishiChangeSet:
         self.changes = Controls.NoControl
         self.changes08 = Controls08.NoControl
 
+    @property
+    def empty(self) -> bool:
+        return self.changes == Controls.NoControl and self.changes08 == Controls08.NoControl
+
     def set_power(self, power: PowerOnOff):
         self.desired_state.power_on_off = power
         self.changes |= Controls.PowerOnOff

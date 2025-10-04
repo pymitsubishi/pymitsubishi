@@ -4,7 +4,15 @@ from pprint import pprint
 import time
 
 from .mitsubishi_controller import MitsubishiController
-from .mitsubishi_parser import DriveMode, HorizontalWindDirection, VerticalWindDirection, WindSpeed
+from .mitsubishi_parser import (
+    DriveMode,
+    HorizontalWindDirection,
+    VerticalWindDirection,
+    WindSpeed,
+    Controls,
+    PowerOnOff,
+    Controls08,
+)
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument("--verbose", "-v", help="More verbose output (up to 2 times)", action="count", default=0)
@@ -36,49 +44,59 @@ ctrl = MitsubishiController.create(args.host)
 
 ctrl.fetch_status()
 desired_state = ctrl.state.general
-update_state = False
+controls = Controls.NoControl
+controls08 = Controls08.NoControl
 
 if args.mode:
     drive_mode = DriveMode[args.mode.upper()]
     print(f"Setting mode to {drive_mode}")
-    ctrl.set_mode(drive_mode)
-    update_state = True
+    if drive_mode == DriveMode.AUTO:
+        drive_mode = 8
+    else:
+        drive_mode = drive_mode.value
+    desired_state.drive_mode = drive_mode
+    controls |= Controls.DriveMode
 if args.target_temperature:
     print(f"Setting target temperature to {args.target_temperature}")
-    ctrl.set_target_temperature(args.target_temperature)
-    update_state = True
+    desired_state.temperature = args.target_temperature
+    controls |= Controls.Temperature
 if args.fan_speed:
     fan_speed = WindSpeed[args.fan_speed.upper()]
     print(f"Setting fan speed to {fan_speed}")
-    ctrl.set_fan_speed(fan_speed)
-    update_state = True
+    desired_state.wind_speed = fan_speed
+    controls |= Controls.WindSpeed
 if args.vertical_wind_direction:
     v_vane = VerticalWindDirection[args.vertical_wind_direction.upper()]
     print(f"Setting vertical wind direction to {v_vane}")
-    ctrl.set_vertical_vane(v_vane)
-    update_state = True
+    desired_state.vertical_wind_direction = v_vane
+    controls |= Controls.UpDownWindDirection
 if args.horizontal_wind_direction:
     h_vane = HorizontalWindDirection[args.horizontal_wind_direction.upper()]
     print(f"Setting horizontal wind direction to {h_vane}")
-    ctrl.set_horizontal_vane(h_vane)
-    update_state = True
+    desired_state.horizontal_wind_direction = h_vane
+    controls |= Controls.LeftRightWindDirect
 if args.power_saving:
     ps = args.power_saving.upper() == "ON"
     print(f"Setting power saving to {ps}")
-    ctrl.set_power_saving(ps)
-    update_state = True
+    desired_state.is_power_saving = ps
+    controls08 |= Controls08.PowerSaving
 if args.power:
-    # Keep power for last, so we can configure the unit correctly before switching on
-    power = args.power.upper() == "ON"
+    power = PowerOnOff[args.power]
     print(f"Setting power to {power}")
-    ctrl.set_power(power)
-    update_state = True
+    desired_state.power_on_off = power
+    controls |= Controls.PowerOnOff
 
 if args.reboot:
     print("Sending reboot command...")
     ctrl.api.send_reboot_request()
 
-if update_state:
+if controls != Controls.NoControl:
+    new_state = ctrl._send_general_control_command(desired_state, controls)
+
+if controls08 != Controls08.NoControl:
+    new_state = ctrl._send_extend08_command(desired_state, controls)
+
+if controls != Controls.NoControl or controls08 != Controls08.NoControl:
     print(f"Updates sent, waiting {ctrl.wait_time_after_command} seconds to see changes...")
     time.sleep(ctrl.wait_time_after_command)
     ctrl.fetch_status()

@@ -7,11 +7,9 @@ from .mitsubishi_controller import MitsubishiController
 from .mitsubishi_parser import (
     DriveMode,
     HorizontalWindDirection,
+    PowerOnOff,
     VerticalWindDirection,
     WindSpeed,
-    Controls,
-    PowerOnOff,
-    Controls08,
 )
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)

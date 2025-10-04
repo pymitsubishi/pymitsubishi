@@ -27,6 +27,53 @@ from .mitsubishi_parser import (
 logger = logging.getLogger(__name__)
 
 
+class MitsubishiChangeSet:
+    desired_state: GeneralStates
+    changes: Controls
+    changes08: Controls08
+
+    def __init__(self, current_state: GeneralStates):
+        self.desired_state = current_state
+        self.changes = Controls.NoControl
+        self.changes08 = Controls08.NoControl
+
+    def set_power(self, power: PowerOnOff):
+        self.desired_state.power_on_off = power
+        self.changes |= Controls.PowerOnOff
+
+    def set_mode(self, drive_mode: DriveMode):
+        if drive_mode == DriveMode.AUTO:
+            drive_mode = 8
+        else:
+            drive_mode = drive_mode.value
+        self.desired_state.drive_mode = drive_mode
+        self.changes |= Controls.DriveMode
+
+    def set_temperature(self, temperature: float):
+        self.desired_state.temperature = temperature
+        self.changes |= Controls.Temperature
+
+    def set_dehumidifier(self, humidity: int):
+        self.desired_state.dehum_setting = humidity
+        self.changes08 |= Controls08.Dehum
+
+    def set_fan_speed(self, fan_speed: WindSpeed):
+        self.desired_state.wind_speed = fan_speed
+        self.changes |= Controls.WindSpeed
+
+    def set_vertical_vane(self, v_vane: VerticalWindDirection):
+        self.desired_state.vertical_wind_direction = v_vane
+        self.changes |= Controls.UpDownWindDirection
+
+    def set_horizontal_vane(self, h_vane: HorizontalWindDirection):
+        self.desired_state.horizontal_wind_direction = h_vane
+        self.changes |= Controls.LeftRightWindDirect
+
+    def set_power_saving(self, power_saving: bool):
+        self.desired_state.is_power_saving = power_saving
+        self.changes08 |= Controls08.PowerSaving
+
+
 class MitsubishiController:
     """Business logic controller for Mitsubishi AC devices"""
 
@@ -83,6 +130,21 @@ class MitsubishiController:
         if self.state is None or self.state.general is None:
             self.fetch_status()
 
+    def changeset(self):
+        self._ensure_state_available()
+        return MitsubishiChangeSet(self.state.general)
+
+    def apply_changeset(self, cs: MitsubishiChangeSet) -> ParsedDeviceState | None:
+        new_state = None
+
+        if cs.changes != Controls.NoControl:
+            new_state = self._send_general_control_command(cs.desired_state, cs.changes)
+
+        if cs.changes08 != Controls08.NoControl:
+            new_state = self._send_extend08_command(cs.desired_state, cs.changes08)
+
+        return new_state
+
     def _create_updated_state(self, **overrides) -> GeneralStates:
         """Create updated state with specified field overrides"""
         if not self.state or not self.state.general:
@@ -110,83 +172,44 @@ class MitsubishiController:
         )
 
     def set_power(self, power_on: bool) -> ParsedDeviceState:
-        """Set power on/off"""
-        self._ensure_state_available()
-
-        new_power = PowerOnOff.ON if power_on else PowerOnOff.OFF
-        updated_state = self._create_updated_state(power_on_off=new_power)
-        new_state = self._send_general_control_command(updated_state, Controls.PowerOnOff)
-        self.state = new_state
-        return new_state
+        cs = self.changeset()
+        cs.set_power(PowerOnOff.ON if power_on else PowerOnOff.OFF)
+        return self.apply_changeset(cs)
 
     def set_temperature(self, temperature_celsius: float) -> ParsedDeviceState:
-        """Set target temperature in Celsius"""
-        self._ensure_state_available()
-
-        updated_state = self._create_updated_state(temperature=temperature_celsius)
-        new_state = self._send_general_control_command(updated_state, Controls.Temperature)
-        self.state = new_state
-        return new_state
+        cs = self.changeset()
+        cs.set_temperature(temperature_celsius)
+        return self.apply_changeset(cs)
 
     def set_mode(self, mode: DriveMode) -> ParsedDeviceState:
-        """Set operating mode"""
-        self._ensure_state_available()
-
-        # Setting mode 0 for auto doesn't seem to work
-        # But setting 0xb for cooler+isee doesn't work either
-        # Special case "auto" here:
-        if mode == DriveMode.AUTO:
-            mode = mode.value | 8
-
-        updated_state = self._create_updated_state(drive_mode=mode)
-        new_state = self._send_general_control_command(updated_state, Controls.DriveMode)
-        self.state = new_state
-        return new_state
+        cs = self.changeset()
+        cs.set_mode(mode)
+        return self.apply_changeset(cs)
 
     def set_fan_speed(self, speed: WindSpeed) -> ParsedDeviceState:
-        """Set fan speed"""
-        self._ensure_state_available()
-
-        updated_state = self._create_updated_state(wind_speed=speed)
-        new_state = self._send_general_control_command(updated_state, Controls.WindSpeed)
-        self.state = new_state
-        return new_state
+        cs = self.changeset()
+        cs.set_fan_speed(speed)
+        return self.apply_changeset(cs)
 
     def set_vertical_vane(self, direction: VerticalWindDirection) -> ParsedDeviceState:
-        """Set vertical vane direction (right or left side)"""
-        self._ensure_state_available()
-
-        updated_state = self._create_updated_state(vertical_wind_direction=direction)
-        new_state = self._send_general_control_command(updated_state, Controls.UpDownWindDirection)
-        self.state = new_state
-        return new_state
+        cs = self.changeset()
+        cs.set_vertical_vane(direction)
+        return self.apply_changeset(cs)
 
     def set_horizontal_vane(self, direction: HorizontalWindDirection) -> ParsedDeviceState:
-        """Set horizontal vane direction"""
-        self._ensure_state_available()
-
-        updated_state = self._create_updated_state(horizontal_wind_direction=direction)
-        new_state = self._send_general_control_command(updated_state, Controls.LeftRightWindDirect)
-        self.state = new_state
-        return new_state
+        cs = self.changeset()
+        cs.set_horizontal_vane(direction)
+        return self.apply_changeset(cs)
 
     def set_dehumidifier(self, setting: int) -> ParsedDeviceState:
-        """Set dehumidifier level (0-100)"""
-        self._ensure_state_available()
-
-        updated_state = self._create_updated_state(dehum_setting=setting)
-        new_state = self._send_extend08_command(updated_state, Controls08.Dehum)
-        self.state = new_state
-        return new_state
+        cs = self.changeset()
+        cs.set_dehumidifier(setting)
+        return self.apply_changeset(cs)
 
     def set_power_saving(self, enabled: bool) -> ParsedDeviceState:
-        """Enable or disable power saving mode"""
-        self._ensure_state_available()
-
-        updated_state = self._create_updated_state(is_power_saving=enabled)
-        new_state = self._send_extend08_command(updated_state, Controls08.PowerSaving)
-        self.state = new_state
-        return new_state
+        cs = self.changeset()
+        cs.set_power_saving(enabled)
+        return self.apply_changeset(cs)
 
     def send_buzzer_command(self, enabled: bool = True) -> ParsedDeviceState:
         """Send buzzer control command"""

@@ -237,8 +237,6 @@ class GeneralStates:
         cmd = bytearray(b"\x41\x01\x30\x10\x01")
         cmd += b"\0" * 15
 
-        # Even though this is a bitfield, my heatpump only reads in 1 change per update
-        # TODO: enforce this
         controls |= Controls.OutsideControl
         cmd[5:7] = controls.to_bytes(2, byteorder="big", signed=False)
         cmd[7] = self.power_on_off.value

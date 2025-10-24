@@ -110,8 +110,9 @@ class Controls08(enum.IntFlag):
 
 def log_unexpected_value(code_value: str, position: int, value: int | bytes):
     svalue = "[" + value.hex() + "]" if isinstance(value, bytes) else str(value)
-    logger.warning(f"Unexpected value found in {code_value} at position {position}: {svalue}")
-    logger.warning("Please report this, so this can be added to the decoding.")
+    logger.info(f"Unexpected value found in {code_value} at position {position}: {svalue}. "
+                f"Please report this, so this can be added to the decoding. "
+                f"Try to describe what was happening around the time of this value.")
 
 
 def try_enum_or_log(code_value: str, position: int, value: int, enum_class: type):
@@ -553,6 +554,7 @@ class AutoStates:
         if data[8] != 0:
             # observed 0x04 during auto-mode heating startup
             # "switching pump direction" or something?
+            # 0x08 also reported
             log_unexpected_value(cls.__name__, 8, data[8])
 
         obj.power_mode = data[9]

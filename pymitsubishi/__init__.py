@@ -23,6 +23,8 @@ from .mitsubishi_parser import (
     SensorStates,
     VerticalWindDirection,
     WindSpeed,
+    RemoteTemperatureStates,
+    RemoteTemperatureMode
 )
 
 __all__ = [

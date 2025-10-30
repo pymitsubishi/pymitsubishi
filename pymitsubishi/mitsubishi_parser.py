@@ -597,8 +597,8 @@ class RemoteTemperatureStates:
             data[1] in [0x62, 0x7B] and data[5] == 0x07
         )  # <- Doesn't exist? How to know if we're using an external thermostat?
 
-    @classmethod
-    def generate_remote_temperature_command(self, mode: RemoteTemperatureMode, temperature_celsius: float) -> bytes:
+    @staticmethod
+    def generate_remote_temperature_command(mode: RemoteTemperatureMode, temperature_celsius: float) -> bytes:
         payload = bytearray(
             [mode, *celsius_to_legacy(temperature_celsius), *celsius_to_enhanced_temperature(temperature_celsius)]
         )

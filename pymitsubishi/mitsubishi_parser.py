@@ -26,6 +26,7 @@ class DriveMode(enum.Enum):
     DEHUM = 2
     COOLER = 3
     FAN = 7
+    _AUTO = 8
 
 
 class WindSpeed(enum.Enum):
@@ -699,9 +700,10 @@ def legacy_to_celsius(data: bytes) -> float:
     if len(data) != 1:
         raise ValueError("Legacy temperature out of byte range")
     temp = (31 - int.from_bytes(data, "big")) % 0x10
+    temp_float = float(temp)
     if (int.from_bytes(data, "big") // 0x10) > 0:
-        temp += 0.5
-    return temp + 16
+        temp_float += 0.5
+    return temp_float + 16
 
 
 def celsius_to_legacy(temp: float) -> bytes:

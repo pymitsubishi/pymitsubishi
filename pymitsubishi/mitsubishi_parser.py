@@ -108,6 +108,11 @@ class Controls08(enum.IntFlag):
     # 0x80
 
 
+class RemoteTemperatureMode(enum.IntFlag):
+    UseInternal = 0x00
+    RemoteTemp = 0x01
+
+
 def log_unexpected_value(code_value: str, position: int, value: int | bytes):
     svalue = "[" + value.hex() + "]" if isinstance(value, bytes) else str(value)
     logger.info(f"Unexpected value found in {code_value} at position {position}: {svalue}. "
@@ -571,6 +576,39 @@ class AutoStates:
         return obj
 
 
+
+@dataclasses.dataclass
+class RemoteTemperatureStates:
+    """ Remote temperature states, external thermostat state,
+    ref https://muart-group.github.io/developer/it-protocol/0x41-set-request/0x07-set-remote-temperature 
+    """
+    Temperature: float
+    Mode: RemoteTemperatureMode = RemoteTemperatureMode.UseInternal
+
+    @staticmethod
+    def is_remote_temperature_state_payload(data: bytes) -> bool:
+        """TODO"""
+        if len(data) < 6:
+            return False
+        return data[1] in [0x62, 0x7B] and data[5] == 0x07 # <- Doesn't exist? How to know if we're using an external thermostat?
+
+
+    @classmethod
+    def generate_remote_temperature_command(self, mode: RemoteTemperatureMode, temperature_celsius: float) -> bytes:
+        payload = bytearray([
+            mode,
+            *celsius_to_legacy(temperature_celsius),
+            *celsius_to_enhanced_temperature(temperature_celsius)
+        ])
+        cmd = bytearray(b"\x41\x01\x30\x10\x07") # ref https://muart-group.github.io/developer/it-protocol/0x41-set-request/0x07-set-remote-temperature
+        cmd += b"\0" * 15
+
+        cmd[5:8] = payload
+        fcc = calc_fcc(cmd)
+        command = b"\xfc" + cmd + bytes([fcc])
+        return command
+
+
 @dataclasses.dataclass
 class ParsedDeviceState:
     """Complete parsed device state combining all state types"""
@@ -580,6 +618,7 @@ class ParsedDeviceState:
     errors: ErrorStates | None = None
     energy: EnergyStates | None = None  # New energy/operational data
     auto_state: AutoStates | None = None
+    remote_temperature: RemoteTemperatureStates | None = None
     mac: str = ""
     serial: str = ""
     rssi: str = ""
@@ -610,6 +649,8 @@ class ParsedDeviceState:
                 parsed_state._unknown5 = Unknown5States.parse_unknown5_states(value)
             elif AutoStates.is_auto_states_payload(value):
                 parsed_state.auto_state = AutoStates.parse_unknown9_states(value)
+            elif RemoteTemperatureStates.is_remote_temperature_state_payload(value):
+                logger.debug(f"Got remote temperature state payload: {value.hex()}")
             else:
                 logger.debug(f"Ignoring unknown code value: {value.hex()}")
 
@@ -633,6 +674,44 @@ def convert_temperature_to_segment(temperature: int) -> str:
     """Convert temperature to segment 14 format"""
     value = 0x80 + (temperature // 0.5)
     return format(int(value), "02x")
+
+
+def celsius_to_enhanced_temperature(temperature: float) -> bytes:
+    """Convert temperature (Celsius) to enhanced temperature, ref https://muart-group.github.io/developer/it-protocol/data-types/temperature-units#enhanced-temperatures """
+    value = int((temperature * 2) + 128)
+    if not 0 <= value <= 255:
+        raise ValueError("Enhanced temperature out of byte range")
+    return value.to_bytes(1, "big")
+
+
+def enhanced_temperature_to_celsius(data: bytes) -> float:
+    """Convert enhanced temperature, ref https://muart-group.github.io/developer/it-protocol/data-types/temperature-units#enhanced-temperatures to temperature (Celsius)"""
+    if len(data) != 1:
+        raise ValueError("Enhanced temperature out of byte range")
+    return (int.from_bytes(data, "big") - 128) / 2
+
+
+def legacy_to_celsius(data: bytes) -> float:
+    """Convert legacy temperature to celsius, ctrl+c -> ctrl+v from https://muart-group.github.io/developer/it-protocol/data-types/temperature-units#setpoint-temperature"""
+    if len(data) != 1:
+        raise ValueError("Legacy temperature out of byte range")
+    temp = (31 - int.from_bytes(data, "big")) % 0x10
+    if (int.from_bytes(data, "big") // 0x10) > 0:
+        temp += 0.5
+    return temp + 16
+
+
+def celsius_to_legacy(temp: float) -> bytes:
+    """Convert Celsius to legacy temperature, ctrl+c -> ctrl+v from https://muart-group.github.io/developer/it-protocol/data-types/temperature-units#setpoint-temperature"""
+    if temp < 16:
+        temp = 16
+    if temp > 31.5:
+        temp = 31.5
+    wire = (31 - int(temp)) & 0xF
+    
+    if temp % 1 >= 0.5:
+        wire += 0x10
+    return wire.to_bytes(1, "big")
 
 
 def get_normalized_temperature(hex_value: int) -> int:

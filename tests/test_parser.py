@@ -13,13 +13,13 @@ from pymitsubishi.mitsubishi_parser import (
     GeneralStates,
     ParsedDeviceState,
     calc_fcc,
+    celsius_to_enhanced_temperature,
+    celsius_to_legacy,
     convert_temperature,
     convert_temperature_to_segment,
+    enhanced_temperature_to_celsius,
     get_normalized_temperature,
     legacy_to_celsius,
-    celsius_to_legacy,
-    enhanced_temperature_to_celsius,
-    celsius_to_enhanced_temperature
 )
 
 from .test_fixtures import SAMPLE_CODE_VALUES, SAMPLE_PROFILE_CODES
@@ -71,7 +71,7 @@ class TestTemperatureConversion:
             if hex_val >= 0x80:  # Valid range
                 normalized = get_normalized_temperature(hex_val)
                 assert 0 <= normalized <= 400  # Valid normalized range
-        
+
         real_temps = [12, 16, 18, 20, 22, 24, 26, 28, 27.5, 30, 31.5, 35]
         for temp_units in real_temps:
             # Test segment conversion
@@ -83,7 +83,7 @@ class TestTemperatureConversion:
             assert len(enhanced) == 1
 
             legacy_normalized = legacy_to_celsius(legacy)
-            assert legacy_normalized == min(31.5,max(16,temp_units)) # min 16, max 31.5
+            assert legacy_normalized == min(31.5, max(16, temp_units))  # min 16, max 31.5
 
             enhanced_normalized = enhanced_temperature_to_celsius(enhanced)
             assert enhanced_normalized == temp_units

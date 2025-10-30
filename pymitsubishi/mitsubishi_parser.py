@@ -115,9 +115,11 @@ class RemoteTemperatureMode(enum.IntFlag):
 
 def log_unexpected_value(code_value: str, position: int, value: int | bytes):
     svalue = "[" + value.hex() + "]" if isinstance(value, bytes) else str(value)
-    logger.info(f"Unexpected value found in {code_value} at position {position}: {svalue}. "
-                f"Please report this, so this can be added to the decoding. "
-                f"Try to describe what was happening around the time of this value.")
+    logger.info(
+        f"Unexpected value found in {code_value} at position {position}: {svalue}. "
+        f"Please report this, so this can be added to the decoding. "
+        f"Try to describe what was happening around the time of this value."
+    )
 
 
 def try_enum_or_log(code_value: str, position: int, value: int, enum_class: type):
@@ -576,12 +578,12 @@ class AutoStates:
         return obj
 
 
-
 @dataclasses.dataclass
 class RemoteTemperatureStates:
-    """ Remote temperature states, external thermostat state,
-    ref https://muart-group.github.io/developer/it-protocol/0x41-set-request/0x07-set-remote-temperature 
+    """Remote temperature states, external thermostat state,
+    ref https://muart-group.github.io/developer/it-protocol/0x41-set-request/0x07-set-remote-temperature
     """
+
     Temperature: float
     Mode: RemoteTemperatureMode = RemoteTemperatureMode.UseInternal
 
@@ -590,17 +592,18 @@ class RemoteTemperatureStates:
         """TODO"""
         if len(data) < 6:
             return False
-        return data[1] in [0x62, 0x7B] and data[5] == 0x07 # <- Doesn't exist? How to know if we're using an external thermostat?
-
+        return (
+            data[1] in [0x62, 0x7B] and data[5] == 0x07
+        )  # <- Doesn't exist? How to know if we're using an external thermostat?
 
     @classmethod
     def generate_remote_temperature_command(self, mode: RemoteTemperatureMode, temperature_celsius: float) -> bytes:
-        payload = bytearray([
-            mode,
-            *celsius_to_legacy(temperature_celsius),
-            *celsius_to_enhanced_temperature(temperature_celsius)
-        ])
-        cmd = bytearray(b"\x41\x01\x30\x10\x07") # ref https://muart-group.github.io/developer/it-protocol/0x41-set-request/0x07-set-remote-temperature
+        payload = bytearray(
+            [mode, *celsius_to_legacy(temperature_celsius), *celsius_to_enhanced_temperature(temperature_celsius)]
+        )
+        cmd = bytearray(
+            b"\x41\x01\x30\x10\x07"
+        )  # ref https://muart-group.github.io/developer/it-protocol/0x41-set-request/0x07-set-remote-temperature
         cmd += b"\0" * 15
 
         cmd[5:8] = payload
@@ -677,7 +680,7 @@ def convert_temperature_to_segment(temperature: int) -> str:
 
 
 def celsius_to_enhanced_temperature(temperature: float) -> bytes:
-    """Convert temperature (Celsius) to enhanced temperature, ref https://muart-group.github.io/developer/it-protocol/data-types/temperature-units#enhanced-temperatures """
+    """Convert temperature (Celsius) to enhanced temperature, ref https://muart-group.github.io/developer/it-protocol/data-types/temperature-units#enhanced-temperatures"""
     value = int((temperature * 2) + 128)
     if not 0 <= value <= 255:
         raise ValueError("Enhanced temperature out of byte range")
@@ -708,7 +711,7 @@ def celsius_to_legacy(temp: float) -> bytes:
     if temp > 31.5:
         temp = 31.5
     wire = (31 - int(temp)) & 0xF
-    
+
     if temp % 1 >= 0.5:
         wire += 0x10
     return wire.to_bytes(1, "big")

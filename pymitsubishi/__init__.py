@@ -20,11 +20,11 @@ from .mitsubishi_parser import (
     ParsedDeviceState,
     PowerOnOff,
     RemoteLock,
+    RemoteTemperatureMode,
+    RemoteTemperatureStates,
     SensorStates,
     VerticalWindDirection,
     WindSpeed,
-    RemoteTemperatureStates,
-    RemoteTemperatureMode
 )
 
 __all__ = [
@@ -44,4 +44,6 @@ __all__ = [
     "ErrorStates",
     "ParsedDeviceState",
     "RemoteLock",
+    "RemoteTemperatureMode",
+    "RemoteTemperatureStates",
 ]

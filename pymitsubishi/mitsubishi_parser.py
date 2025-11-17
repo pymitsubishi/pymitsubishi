@@ -289,7 +289,7 @@ class SensorStates:
 
     @property
     def room_temperature(self) -> float:
-        return self.inside_temperature_2
+        return self.inside_temperature_1_fine
 
     @staticmethod
     def is_sensor_states_payload(data: bytes) -> bool:
@@ -336,7 +336,7 @@ class SensorStates:
         # What's the difference between data[8], data[11] and data[12]?
         # data[8] and data[11] seem to be the exact same value (with different conversion & thus truncation)
         # but they seem to move exactly together
-        # data[12] moves differently and seems to lead vs data[8]/data[11]
+        # data[12] moves differently and seems to lead vs data[8]/data[11] during cooling; lag during heating
 
         if data[13] != 0xFE:
             # also seen: 0x00

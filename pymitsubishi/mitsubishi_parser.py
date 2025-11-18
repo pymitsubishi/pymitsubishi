@@ -682,7 +682,7 @@ def convert_temperature_to_segment(temperature: int) -> str:
 
 def celsius_to_enhanced_temperature(temperature: float) -> bytes:
     """Convert temperature (Celsius) to enhanced temperature, ref https://muart-group.github.io/developer/it-protocol/data-types/temperature-units#enhanced-temperatures"""
-    value = int((temperature * 2) + 128)
+    value = round((temperature * 2) + 128)
     if not 0 <= value <= 255:
         raise ValueError("Enhanced temperature out of byte range")
     return value.to_bytes(1, "big")

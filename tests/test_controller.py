@@ -55,3 +55,24 @@ def test_set_remote_lock(lock, hex_cmd):
     controller.set_remote_lock(lock)
 
     mock_api.send_hex_command.assert_called_once_with(hex_cmd)
+
+
+@pytest.mark.parametrize(
+    "temp, hex_cmd",
+    [
+        (22.0, "fc410130100104020000090000000000000000ac4181"),
+        (22.5, "fc410130100104020000190000000000000000ad4170"),
+        (16.0, "fc4101301001040200000f0000000000000000a04187"),
+        (12.0, "fc4101301001040200000f000000000000000098418f"),
+    ],
+)
+def test_set_temperature(temp, hex_cmd):
+    """Test a complete cycle of status fetch and device control."""
+    mock_api = Mock()
+    controller = MitsubishiController(mock_api)
+    mock_api.send_status_request.return_value = REAL_DEVICE_XML_RESPONSE
+    mock_api.send_hex_command = Mock(return_value=REAL_DEVICE_XML_RESPONSE)
+
+    controller.set_temperature(temp)
+
+    mock_api.send_hex_command.assert_called_once_with(hex_cmd)

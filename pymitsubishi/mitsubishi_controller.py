@@ -157,8 +157,8 @@ class MitsubishiController:
 
         return GeneralStates(
             power_on_off=overrides.get("power_on_off", self.state.general.power_on_off),
-            coarse_temperature=int(overrides.get("temperature", self.state.general.temperature)),
-            fine_temperature=overrides.get("temperature", self.state.general.temperature),
+            legacy_temperature=int(overrides.get("temperature", self.state.general.temperature)),
+            new_temperature=overrides.get("temperature", self.state.general.temperature),
             drive_mode=overrides.get("drive_mode", self.state.general.drive_mode),
             wind_speed=overrides.get("wind_speed", self.state.general.wind_speed),
             vertical_wind_direction=overrides.get(

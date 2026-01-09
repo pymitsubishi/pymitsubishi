@@ -61,8 +61,8 @@ def test_parse_general_states_drive_mode_isee(data_hex, mode, off, home, isee):
 )
 def test_parse_general_states_temp(data_hex, temp):
     states = GeneralStates.parse_general_states(bytes.fromhex(data_hex))
-    assert states.coarse_temperature == temp
-    assert states.fine_temperature == temp
+    assert states.legacy_temperature == temp
+    assert states.new_temperature == temp
     assert states.temperature == temp
 
 

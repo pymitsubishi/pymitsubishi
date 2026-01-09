@@ -108,6 +108,10 @@ class Controls08(enum.IntFlag):
     # 0x80
 
 
+def cap(value: int | float, lower: int | float, upper: int | float) -> int | float:
+    return max(min(value, upper), lower)
+
+
 def log_unexpected_value(code_value: str, position: int, value: int | bytes):
     svalue = "[" + value.hex() + "]" if isinstance(value, bytes) else str(value)
     logger.info(
@@ -131,8 +135,8 @@ class GeneralStates:
 
     power_on_off: PowerOnOff = PowerOnOff.OFF
     drive_mode: DriveMode = DriveMode.AUTO
-    coarse_temperature: int = 22
-    fine_temperature: float | None = 22.0
+    legacy_temperature: float = 22  # legacy temperature
+    new_temperature: float | None = 22.0  # new temperature
     wind_speed: WindSpeed = WindSpeed.AUTO
     vertical_wind_direction: VerticalWindDirection = VerticalWindDirection.AUTO
     remote_lock: RemoteLock = RemoteLock.Unlocked
@@ -145,18 +149,18 @@ class GeneralStates:
 
     @property
     def temperature(self) -> float:
-        if self.fine_temperature is not None:
-            return self.fine_temperature
-        return self.coarse_temperature
+        if self.new_temperature is not None:
+            return self.new_temperature
+        return self.legacy_temperature
 
     @temperature.setter
     def temperature(self, value: float):
-        self.fine_temperature = value
-        self.coarse_temperature = int(value)
+        self.new_temperature = value
+        self.legacy_temperature = cap(value, 16, 31.5)
 
     @property
     def temp_mode(self) -> bool:
-        return self.fine_temperature is not None
+        return self.new_temperature is not None
 
     @staticmethod
     def is_general_states_payload(data: bytes) -> bool:
@@ -206,7 +210,7 @@ class GeneralStates:
         if data[9] & 0xF0 != 0x00:
             log_unexpected_value(cls.__name__, 9, data[9:10])
 
-        obj.coarse_temperature = 31 - data[10]
+        obj.legacy_temperature = 31 - (data[10] & 0x0f) + (0.5 if data[10] & 0x10 else 0.0)
         obj.wind_speed = try_enum_or_log(cls.__name__, 11, data[11], WindSpeed)
         obj.vertical_wind_direction = try_enum_or_log(cls.__name__, 12, data[12], VerticalWindDirection)
         obj.remote_lock = try_enum_or_log(cls.__name__, 13, data[13], RemoteLock)
@@ -222,9 +226,9 @@ class GeneralStates:
         obj.wide_vane_adjustment = (wide_vane_data & 0xF0) == 0x80  # Upper 4 bits = 0x80
 
         if data[16] != 0x00:
-            obj.fine_temperature = (data[16] - 0x80) / 2
+            obj.new_temperature = (data[16] - 0x80) / 2
         else:
-            obj.fine_temperature = None
+            obj.new_temperature = None
 
         # Extra states
         obj.dehum_setting = data[17]
@@ -245,7 +249,7 @@ class GeneralStates:
         cmd[7] = self.power_on_off.value
         cmd[8] = self.drive_mode.value if isinstance(self.drive_mode, DriveMode) else self.drive_mode
         # TODO: figure out how to combine mode with iSee; Mode changes don't seem to work when >0x08
-        cmd[9] = 31 - int(self.temperature)
+        cmd[9] = (31 - int(self.legacy_temperature)) + (0x10 if self.legacy_temperature % 1 >= 0.5 else 0x00)
         cmd[10] = self.wind_speed.value
         cmd[11] = self.vertical_wind_direction.value
         cmd[12] = 0
@@ -257,7 +261,7 @@ class GeneralStates:
 
         cmd[16] = 0
         cmd[17] = self.horizontal_wind_direction.value
-        cmd[18] = 0x80 + int(self.fine_temperature * 2) if self.fine_temperature is not None else 0x00
+        cmd[18] = 0x80 + int(self.new_temperature * 2) if self.new_temperature is not None else 0x00
         cmd[19] = 0x41
 
         # Calculate and append FCC

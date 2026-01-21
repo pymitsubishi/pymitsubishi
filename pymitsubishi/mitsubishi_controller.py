@@ -20,6 +20,7 @@ from .mitsubishi_parser import (
     ParsedDeviceState,
     PowerOnOff,
     RemoteLock,
+    SetRemoteTemperature,
     VerticalWindDirection,
     WindSpeed,
 )
@@ -185,6 +186,17 @@ class MitsubishiController:
         cs.set_temperature(temperature_celsius)
         return self.apply_changeset(cs)
 
+    def set_current_temperature(self, temperature_celsius: float | None) -> None:
+        cmd = SetRemoteTemperature()
+        if temperature_celsius is None:
+            cmd.mode = SetRemoteTemperature.Mode.UseInternal
+        else:
+            cmd.mode = SetRemoteTemperature.Mode.RemoteTemp
+            cmd.remote_temperature = temperature_celsius
+        command = cmd.generate_command()
+        response = self.api.send_command(command)
+        self.state = self._parse_status_response(response)
+
     def set_mode(self, mode: DriveMode) -> ParsedDeviceState:
         cs = self.changeset()
         cs.set_mode(mode)
@@ -238,9 +250,6 @@ class MitsubishiController:
         """Send a general control command to the device"""
         # Generate the hex command
         hex_command = state.generate_general_command(controls).hex()
-
-        logger.debug(f"🔧 Sending command: {hex_command}")
-
         response = self.api.send_hex_command(hex_command)
         return self._parse_status_response(response)
 
@@ -248,9 +257,6 @@ class MitsubishiController:
         """Send an extend08 command for advanced features"""
         # Generate the hex command
         hex_command = state.generate_extend08_command(controls).hex()
-
-        logger.debug(f"🔧 Sending extend08 command: {hex_command}")
-
         response = self.api.send_hex_command(hex_command)
         return self._parse_status_response(response)
 

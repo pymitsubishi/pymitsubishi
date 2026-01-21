@@ -618,6 +618,54 @@ class ParsedDeviceState:
         return parsed_state
 
 
+@dataclasses.dataclass
+class SetRemoteTemperature:
+    class Mode(enum.IntFlag):
+        UseInternal = 0x00
+        RemoteTemp = 0x01
+
+    mode: Mode = Mode.UseInternal
+    remote_temperature: float | None = None
+
+    @staticmethod
+    def temperature_to_legacy(temp: float) -> bytes:
+        if temp < 16:
+            temp = 16
+        if temp > 31.5:
+            temp = 31.5
+
+        wire = (31 - int(temp)) & 0xF
+
+        if temp % 1 >= 0.5:
+            wire |= 0x10
+
+        return wire.to_bytes(1, "little")
+
+    @staticmethod
+    def temperature_to_enhanced(temp: float) -> bytes:
+        return int((temp * 2) + 0x80).to_bytes(1, "little")
+
+    def generate_command(self) -> bytes:
+        cmd = bytearray(b"\x41\x01\x30\x10\x07")
+        cmd += b"\0" * 3
+
+        cmd[5] = self.mode.value
+        cmd[6:7] = (
+            SetRemoteTemperature.temperature_to_legacy(self.remote_temperature)
+            if self.remote_temperature is not None
+            else b"\x00"
+        )
+        cmd[7:8] = (
+            SetRemoteTemperature.temperature_to_enhanced(self.remote_temperature)
+            if self.remote_temperature is not None
+            else b"\x00"
+        )
+
+        # Calculate and append FCC
+        fcc = calc_fcc(cmd)
+        return b"\xfc" + cmd + bytes([fcc])
+
+
 def calc_fcc(payload: bytes) -> int:
     """Calculate FCC checksum for Mitsubishi protocol payload"""
     return (0x100 - (sum(payload[0:20]) % 0x100)) % 0x100  # TODO: do we actually need to limit this to 20 bytes?

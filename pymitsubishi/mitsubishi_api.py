@@ -181,6 +181,7 @@ class MitsubishiAPI:
         return self.send_hex_command(command.hex())
 
     def send_hex_command(self, hex_command: str) -> str:
+        logger.debug(f"🔧 Sending command: {hex_command}")
         payload_xml = f"<CSV><CONNECT>ON</CONNECT><CODE><VALUE>{hex_command}</VALUE></CODE></CSV>"
         return self.make_request(payload_xml)
 

@@ -2,7 +2,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from pymitsubishi import DriveMode, MitsubishiController, RemoteLock
+from pymitsubishi import DriveMode, MitsubishiController, RemoteLock, SetRemoteTemperature
 from tests.test_fixtures import REAL_DEVICE_XML_RESPONSE
 
 
@@ -55,3 +55,17 @@ def test_set_remote_lock(lock, hex_cmd):
     controller.set_remote_lock(lock)
 
     mock_api.send_hex_command.assert_called_once_with(hex_cmd)
+
+
+@pytest.mark.parametrize(
+    "data_hex, mode, temperature",
+    [
+        ("fc410130100700000077", SetRemoteTemperature.Mode.UseInternal, None),
+        ("fc4101301007000aaac3", SetRemoteTemperature.Mode.UseInternal, 21),
+        ("fc41013010070104b6bc", SetRemoteTemperature.Mode.RemoteTemp, 27),
+        ("fc41013010070110c79f", SetRemoteTemperature.Mode.RemoteTemp, 35.5),
+    ],
+)
+def test_remote_temperature(data_hex, mode, temperature):
+    command = SetRemoteTemperature(mode=mode, remote_temperature=temperature).generate_command()
+    assert command.hex() == data_hex

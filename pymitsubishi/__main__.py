@@ -33,6 +33,27 @@ parser.add_argument(
     choices=[_.name for _ in HorizontalWindDirection],
 )
 parser.add_argument("--power-saving", help="Set power saving", type=lambda s: s.upper(), choices=["ON", "OFF"])
+
+
+def float_or_internal(arg: str) -> str | float:
+    if arg.upper() == "INTERNAL":
+        return "INTERNAL"
+    try:
+        return float(arg)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"Argument `{arg}` is not a valid value")
+
+
+parser.add_argument(
+    "--current-temperature",
+    help='Set current temperature to either "INTERNAL", or a specific value in ºC. '
+    "WARNING: Setting an external temperature will effectively disable the thermostat control of the unit! "
+    "This is a Write-Only setting: there is no way to see the current setting. "
+    "This setting persists until a full power cycle of the heat pump.",
+    metavar="TEMP_OR_INTERNAL",
+    type=float_or_internal,
+)
+
 args = parser.parse_args()
 
 logging.basicConfig(level=logging.WARNING - 10 * args.verbose)
@@ -75,8 +96,21 @@ if args.reboot:
     print("Sending reboot command...")
     ctrl.api.send_reboot_request()
 
+wait_for_changes = False
+
 if not changeset.empty:
     ctrl.apply_changeset(changeset)
+    wait_for_changes = True
+
+if args.current_temperature is not None:
+    if args.current_temperature == "INTERNAL":
+        t = None
+    else:
+        t = args.current_temperature
+    ctrl.set_current_temperature(t)
+    wait_for_changes = True
+
+if wait_for_changes:
     print(f"Updates sent, waiting {ctrl.wait_time_after_command} seconds to see changes...")
     time.sleep(ctrl.wait_time_after_command)
     ctrl.fetch_status()

@@ -10,7 +10,7 @@ from setuptools import setup
 
 # Keeping version here for PROJECT_RULES.md requirement
 # This must match the version in pyproject.toml and pymitsubishi/__init__.py
-VERSION = "0.4.2"
+VERSION = "0.5.0"
 
 if __name__ == "__main__":
     setup(

@@ -47,11 +47,8 @@ class MitsubishiChangeSet:
         self.changes |= Controls.PowerOnOff
 
     def set_mode(self, drive_mode: DriveMode):
-        if drive_mode == DriveMode.AUTO:
-            drive_mode = 8
-        else:
-            drive_mode = drive_mode.value
-        self.desired_state.drive_mode = drive_mode
+        mode_value = 8 if drive_mode == DriveMode.AUTO else drive_mode.value
+        self.desired_state.drive_mode = mode_value
         self.changes |= Controls.DriveMode
 
     def set_temperature(self, temperature: float):
@@ -135,8 +132,10 @@ class MitsubishiController:
         if self.state is None or self.state.general is None:
             self.fetch_status()
 
-    def changeset(self):
+    def changeset(self) -> MitsubishiChangeSet:
         self._ensure_state_available()
+        if self.state is None or self.state.general is None:
+            raise RuntimeError("Failed to fetch device state")
         return MitsubishiChangeSet(self.state.general)
 
     def apply_changeset(self, cs: MitsubishiChangeSet) -> ParsedDeviceState | None:
@@ -176,12 +175,12 @@ class MitsubishiController:
             remote_lock=overrides.get("remote_lock", self.state.general.remote_lock),
         )
 
-    def set_power(self, power_on: bool) -> ParsedDeviceState:
+    def set_power(self, power_on: bool) -> ParsedDeviceState | None:
         cs = self.changeset()
         cs.set_power(PowerOnOff.ON if power_on else PowerOnOff.OFF)
         return self.apply_changeset(cs)
 
-    def set_temperature(self, temperature_celsius: float) -> ParsedDeviceState:
+    def set_temperature(self, temperature_celsius: float) -> ParsedDeviceState | None:
         cs = self.changeset()
         cs.set_temperature(temperature_celsius)
         return self.apply_changeset(cs)
@@ -197,32 +196,32 @@ class MitsubishiController:
         response = self.api.send_command(command)
         self.state = self._parse_status_response(response)
 
-    def set_mode(self, mode: DriveMode) -> ParsedDeviceState:
+    def set_mode(self, mode: DriveMode) -> ParsedDeviceState | None:
         cs = self.changeset()
         cs.set_mode(mode)
         return self.apply_changeset(cs)
 
-    def set_fan_speed(self, speed: WindSpeed) -> ParsedDeviceState:
+    def set_fan_speed(self, speed: WindSpeed) -> ParsedDeviceState | None:
         cs = self.changeset()
         cs.set_fan_speed(speed)
         return self.apply_changeset(cs)
 
-    def set_vertical_vane(self, direction: VerticalWindDirection) -> ParsedDeviceState:
+    def set_vertical_vane(self, direction: VerticalWindDirection) -> ParsedDeviceState | None:
         cs = self.changeset()
         cs.set_vertical_vane(direction)
         return self.apply_changeset(cs)
 
-    def set_horizontal_vane(self, direction: HorizontalWindDirection) -> ParsedDeviceState:
+    def set_horizontal_vane(self, direction: HorizontalWindDirection) -> ParsedDeviceState | None:
         cs = self.changeset()
         cs.set_horizontal_vane(direction)
         return self.apply_changeset(cs)
 
-    def set_dehumidifier(self, setting: int) -> ParsedDeviceState:
+    def set_dehumidifier(self, setting: int) -> ParsedDeviceState | None:
         cs = self.changeset()
         cs.set_dehumidifier(setting)
         return self.apply_changeset(cs)
 
-    def set_power_saving(self, enabled: bool) -> ParsedDeviceState:
+    def set_power_saving(self, enabled: bool) -> ParsedDeviceState | None:
         cs = self.changeset()
         cs.set_power_saving(enabled)
         return self.apply_changeset(cs)

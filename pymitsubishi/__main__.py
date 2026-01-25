@@ -40,8 +40,8 @@ def float_or_internal(arg: str) -> str | float:
         return "INTERNAL"
     try:
         return float(arg)
-    except ValueError:
-        raise argparse.ArgumentTypeError(f"Argument `{arg}` is not a valid value")
+    except ValueError as err:
+        raise argparse.ArgumentTypeError(f"Argument `{arg}` is not a valid value") from err
 
 
 parser.add_argument(
@@ -103,10 +103,7 @@ if not changeset.empty:
     wait_for_changes = True
 
 if args.current_temperature is not None:
-    if args.current_temperature == "INTERNAL":
-        t = None
-    else:
-        t = args.current_temperature
+    t = None if args.current_temperature == "INTERNAL" else args.current_temperature
     ctrl.set_current_temperature(t)
     wait_for_changes = True
 

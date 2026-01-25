@@ -130,7 +130,7 @@ class GeneralStates:
     """Parsed general AC states from device response"""
 
     power_on_off: PowerOnOff = PowerOnOff.OFF
-    drive_mode: DriveMode = DriveMode.AUTO
+    drive_mode: DriveMode | int = DriveMode.AUTO
     coarse_temperature: int = 22
     fine_temperature: float | None = 22.0
     wind_speed: WindSpeed = WindSpeed.AUTO

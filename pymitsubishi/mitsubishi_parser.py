@@ -598,22 +598,25 @@ class ParsedDeviceState:
         for hex_value in code_values:
             value = bytes.fromhex(hex_value)
 
-            # Parse different payload types
-            if GeneralStates.is_general_states_payload(value):
-                parsed_state.general = GeneralStates.parse_general_states(value)
-            elif SensorStates.is_sensor_states_payload(value):
-                parsed_state.sensors = SensorStates.parse_sensor_states(value)
-            elif ErrorStates.is_error_states_payload(value):
-                parsed_state.errors = ErrorStates.parse_error_states(value)
-            elif EnergyStates.is_energy_states_payload(value):
-                # Parse energy states with context from general states if available
-                parsed_state.energy = EnergyStates.parse_energy_states(value, parsed_state.general)
-            elif Unknown5States.is_unknown5_states_payload(value):
-                parsed_state._unknown5 = Unknown5States.parse_unknown5_states(value)
-            elif AutoStates.is_auto_states_payload(value):
-                parsed_state.auto_state = AutoStates.parse_unknown9_states(value)
-            else:
-                logger.debug(f"Ignoring unknown code value: {value.hex()}")
+            try:
+                # Parse different payload types
+                if GeneralStates.is_general_states_payload(value):
+                    parsed_state.general = GeneralStates.parse_general_states(value)
+                elif SensorStates.is_sensor_states_payload(value):
+                    parsed_state.sensors = SensorStates.parse_sensor_states(value)
+                elif ErrorStates.is_error_states_payload(value):
+                    parsed_state.errors = ErrorStates.parse_error_states(value)
+                elif EnergyStates.is_energy_states_payload(value):
+                    # Parse energy states with context from general states if available
+                    parsed_state.energy = EnergyStates.parse_energy_states(value, parsed_state.general)
+                elif Unknown5States.is_unknown5_states_payload(value):
+                    parsed_state._unknown5 = Unknown5States.parse_unknown5_states(value)
+                elif AutoStates.is_auto_states_payload(value):
+                    parsed_state.auto_state = AutoStates.parse_unknown9_states(value)
+                else:
+                    logger.debug(f"Ignoring unknown code value: {value.hex()}")
+            except ValueError as e:
+                logger.warning(f"Failed to parse code value: {e}\n{value.hex()}")
 
         return parsed_state
 

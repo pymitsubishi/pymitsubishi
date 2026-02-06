@@ -113,6 +113,11 @@ class TestCodeValueParsing:
             assert hasattr(parsed_state.general, "drive_mode")
             assert hasattr(parsed_state.general, "temperature")
 
+    def test_code_value_parsing_bad_checksum(self):
+        bad_code_values = ["fc62013010020000000b070000000083b046000000d1"]
+        ParsedDeviceState.parse_code_values(bad_code_values)
+        # Should not raise, only log warning
+
 
 class TestProfileCodeAnalysis:
     """Test ProfileCode analysis with real profile data."""

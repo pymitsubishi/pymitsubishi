@@ -188,24 +188,39 @@ class MitsubishiAPI:
         connect=None leaves the cloud connection as-is, True enables it and
         False disables it.
         """
-        if connect is None:
-            payload_xml = "<CSV></CSV>"
-        else:
-            payload_xml = f"<CSV><CONNECT>{'ON' if connect else 'OFF'}</CONNECT></CSV>"
+        payload_xml = f"<CSV>{self._connect_xml(connect)}</CSV>"
         return self.make_request(payload_xml)
 
-    def send_echonet_enable(self) -> str:
-        """Send ECHONET enable command"""
-        payload_xml = "<CSV><CONNECT>ON</CONNECT><ECHONET>ON</ECHONET></CSV>"
+    def send_echonet_enable(self, connect: bool | None = None) -> str:
+        """Enable ECHONET Lite on the adapter.
+
+        connect=None (the default) leaves the MELCloud connection setting
+        untouched. Pass True or False only to change it.
+        """
+        payload_xml = f"<CSV>{self._connect_xml(connect)}<ECHONET>ON</ECHONET></CSV>"
         return self.make_request(payload_xml)
 
-    def send_command(self, command: bytes) -> str:
-        return self.send_hex_command(command.hex())
+    def send_command(self, command: bytes, connect: bool | None = None) -> str:
+        return self.send_hex_command(command.hex(), connect=connect)
 
-    def send_hex_command(self, hex_command: str) -> str:
+    def send_hex_command(self, hex_command: str, connect: bool | None = None) -> str:
+        """Send a control command to the device.
+
+        The adapter stores CONNECT as a setting, so a command that carries
+        CONNECT ON re-enables the MELCloud connection. connect=None (the
+        default) omits the element and leaves the setting untouched. Pass
+        True or False only to change it.
+        """
         logger.debug(f"🔧 Sending command: {hex_command}")
-        payload_xml = f"<CSV><CONNECT>ON</CONNECT><CODE><VALUE>{hex_command}</VALUE></CODE></CSV>"
+        payload_xml = f"<CSV>{self._connect_xml(connect)}<CODE><VALUE>{hex_command}</VALUE></CODE></CSV>"
         return self.make_request(payload_xml)
+
+    @staticmethod
+    def _connect_xml(connect: bool | None) -> str:
+        """CONNECT element for a request, or an empty string to leave the setting alone."""
+        if connect is None:
+            return ""
+        return f"<CONNECT>{'ON' if connect else 'OFF'}</CONNECT>"
 
     def get_unit_info(self) -> dict[str, Any]:
         """Get unit information from the /unitinfo endpoint using admin credentials"""

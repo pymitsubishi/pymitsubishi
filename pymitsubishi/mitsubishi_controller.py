@@ -424,9 +424,9 @@ class MitsubishiController:
         response = self.api.send_hex_command(hex_command)
         return self._parse_status_response(response)
 
-    def enable_echonet(self) -> None:
-        """Send ECHONET enable command"""
-        self.api.send_echonet_enable()
+    def enable_echonet(self, connect: bool | None = None) -> None:
+        """Enable ECHONET Lite. connect=None leaves the MELCloud connection setting untouched."""
+        self.api.send_echonet_enable(connect=connect)
 
     def get_unit_info(self) -> dict[str, Any]:
         """Get detailed unit information from the admin interface"""

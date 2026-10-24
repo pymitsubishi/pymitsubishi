@@ -336,7 +336,7 @@ class SensorStates:
             log_unexpected_value(cls.__name__, 9, data[9:10])
 
         obj.outside_temperature = (data[10] - 0x80) * 0.5
-        if obj.outside_temperature == -64:
+        if data[10] in (0x00, 0x01):  # 0x01 (-63.5) is sent while the unit is off
             obj.outside_temperature = None
 
         obj.inside_temperature_1_fine = (data[11] - 0x80) * 0.5

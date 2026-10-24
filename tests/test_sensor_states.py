@@ -21,6 +21,7 @@ def test_room_temperature(data_hex, room_temperature):
         ("fc620130100300000e00c0b0affe42000114a7000031", 32.0),
         ("fc620130100300000b00baabaafe4200009a33000033", 29.0),
         ("fc620130100300000b0000abaafe4200009a330000ed", None),
+        ("fc620130100300000b0001abaafe4200009a330000ec", None),
     ],
 )
 def test_outside_temperature(data_hex, outside_temperature):

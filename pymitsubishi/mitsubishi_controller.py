@@ -35,6 +35,7 @@ from .mitsubishi_parser import (
     VerticalWindDirection,
     WindSpeed,
 )
+from .mitsubishi_telemetry import parse_ata_telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +168,9 @@ class MitsubishiController:
         # above and recognised here. This is purely additive: air-to-air devices
         # never pass is_atw_payload, so their behaviour is unchanged.
         self._parse_atw_status(code_values, profile_hex, root)
+
+        if profile_hex:
+            self.state.ata_telemetry = parse_ata_telemetry(code_values + profile_hex)
 
         return self.state
 

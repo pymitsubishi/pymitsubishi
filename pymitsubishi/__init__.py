@@ -33,6 +33,14 @@ from .mitsubishi_parser import (
     VerticalWindDirection,
     WindSpeed,
 )
+from .mitsubishi_telemetry import (
+    FIELD_INFO,
+    ATATelemetry,
+    TelemetryField,
+    TelemetryFrame,
+    parse_ata_response,
+    parse_ata_telemetry,
+)
 
 __all__ = [
     # Main API classes
@@ -59,4 +67,10 @@ __all__ = [
     "FTCVersion",
     "is_atw_payload",
     "parse_atw_code_values",
+    "ATATelemetry",
+    "TelemetryField",
+    "TelemetryFrame",
+    "FIELD_INFO",
+    "parse_ata_telemetry",
+    "parse_ata_response",
 ]

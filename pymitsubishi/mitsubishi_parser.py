@@ -12,6 +12,8 @@ import dataclasses
 import enum
 import logging
 
+from .mitsubishi_telemetry import ATATelemetry, parse_ata_telemetry
+
 logger = logging.getLogger(__name__)
 
 
@@ -603,11 +605,13 @@ class ParsedDeviceState:
     echonet_enabled: bool | None = None
 
     _unknown5: Unknown5States | None = None
+    ata_telemetry: ATATelemetry | None = None
 
     @classmethod
     def parse_code_values(cls, code_values: list[str]) -> ParsedDeviceState:
         """Parse a list of code values and return combined device state with energy information"""
         parsed_state = ParsedDeviceState()
+        parsed_state.ata_telemetry = parse_ata_telemetry(code_values)
         logger.debug(f"Parsing {len(code_values)} code values")
 
         for hex_value in code_values:
